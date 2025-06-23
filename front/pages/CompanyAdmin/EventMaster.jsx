@@ -541,8 +541,7 @@ const EventMaster = () => {
         priority: eventForm.priority || '',
         eventType: eventForm.eventType || '',
         employees: selectedEmployees,
-        tasks: tasksPayload,
-        status: 'not_send_for_approval'  // Set default status to not_send_for_approval
+        tasks: tasksPayload
       };
 
       // Add optional fields only if provided
@@ -1959,6 +1958,23 @@ const EventMaster = () => {
                   paddingTop: '1.25rem',
                   gridColumn: '1 / -1'
                 }}>
+                  <button 
+                    type="button" 
+                    onClick={requestHODApproval}
+                    disabled={submitting || !eventForm.departmentId}
+                    style={{ 
+                      padding: '0.75rem 1.25rem', 
+                      background: '#10b981',
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px',
+                      fontWeight: '500',
+                      cursor: submitting || !eventForm.departmentId ? 'not-allowed' : 'pointer',
+                      marginRight: 'auto'
+                    }}
+                  >
+                    Request HOD Approval
+                  </button>
                   <button 
                     type="button" 
                     onClick={() => {

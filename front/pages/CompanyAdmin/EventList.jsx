@@ -133,209 +133,6 @@ const EventList = () => {
     }
   };
 
-  // Add function to handle sending an event for approval
-  const handleSendForApproval = (eventId) => {
-    openSendForApprovalModal(eventId);
-  };
-
-  // Add modal state
-  const [showHodModal, setShowHodModal] = useState(false);
-  const [selectedEventId, setSelectedEventId] = useState(null);
-  const [hodOptions, setHodOptions] = useState([]);
-  const [selectedHodId, setSelectedHodId] = useState('');
-  const [loadingHods, setLoadingHods] = useState(false);
-
-  // Open modal and get HODs for the department
-  const openSendForApprovalModal = async (eventId) => {
-    setSelectedEventId(eventId);
-    setSelectedHodId('');
-    setShowHodModal(true);
-
-    // Find the event and its department
-    const event = events.find(e => e.id === eventId);
-    if (!event || !event.department || !event.department.id) {
-      alert('Cannot find department information for this event');
-      setShowHodModal(false);
-      return;
-    }
-
-    try {
-      setLoadingHods(true);
-      const departmentId = event.department.id;
-      const token = localStorage.getItem('raci_auth_token');
-      const response = await fetch(`${env.apiBaseUrl}/departments/${departmentId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      const data = await response.json();
-
-      // Filter employees with HOD role
-      let hods = [];
-      if (data && data.employees) {
-        hods = data.employees.filter(emp => emp.role === 'hod');
-      }
-
-      // Add department HOD if not already in the list
-      if (data && data.hod && !hods.some(h => h.id === data.hod.id)) {
-        hods.push(data.hod);
-      }
-
-      setHodOptions(hods);
-    } catch (err) {
-      console.error('Failed to load HODs:', err);
-      alert('Could not load HODs. Please try again.');
-    } finally {
-      setLoadingHods(false);
-    }
-  };
-
-  // Submit event for approval with selected HOD
-  const confirmSendForApproval = async () => {
-    if (!selectedHodId) {
-      alert('Please select a HOD');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('raci_auth_token');
-      // Find the selected HOD object to get their email (required by API)
-      const selectedHod = hodOptions.find(h => h.id === selectedHodId);
-
-      const response = await fetch(`${env.apiBaseUrl}/events/${selectedEventId}/submit`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json'
-        },
-        body: JSON.stringify({ 
-          // The backend expects approverEmail; if not provided it will fall back to the event's HOD
-          approverEmail: selectedHod?.email || undefined 
-        })
-      });
-      
-      if (!response.ok) throw new Error(`API error: ${response.status}`);
-      
-      // Update the event status locally
-      setEvents(prev => prev.map(event => 
-        event.id === selectedEventId ? { ...event, status: 'pending' } : event
-      ));
-      
-      alert('Event sent for approval successfully!');
-      setShowHodModal(false);
-    } catch (err) {
-      console.error('Failed to send event for approval', err);
-      alert('Failed to send event for approval. Please try again.');
-    }
-  };
-
-  // Modal component for HOD selection
-  const renderHodModal = () => {
-    if (!showHodModal) return null;
-
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1000
-      }}>
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: 8,
-          width: '90%',
-          maxWidth: 500,
-          padding: '24px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-        }}>
-          <h3 style={{ marginTop: 0, marginBottom: 16 }}>Send Event for Approval</h3>
-          
-          <p style={{ marginBottom: 16 }}>
-            Please select a HOD to approve this event:
-          </p>
-          
-          {loadingHods ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-              <div style={{ 
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                border: '2px solid #e5e7eb',
-                borderTopColor: '#6366f1',
-                animation: 'spin 1s linear infinite',
-                marginRight: 8
-              }}></div>
-              <span>Loading HODs...</span>
-            </div>
-          ) : hodOptions.length === 0 ? (
-            <div style={{ color: '#b91c1c', marginBottom: 16 }}>
-              No HODs found for this department. Please assign a HOD in Department Management first.
-            </div>
-          ) : (
-            <select
-              value={selectedHodId}
-              onChange={(e) => setSelectedHodId(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: 4,
-                border: '1px solid #d1d5db',
-                marginBottom: 16
-              }}
-            >
-              <option value="">Select a HOD</option>
-              {hodOptions.map(hod => (
-                <option key={hod.id} value={hod.id}>
-                  {hod.name} {hod.designation ? `(${hod.designation})` : ''}
-                </option>
-              ))}
-            </select>
-          )}
-          
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-            <button
-              onClick={() => setShowHodModal(false)}
-              style={{
-                padding: '8px 16px',
-                border: '1px solid #d1d5db',
-                borderRadius: 4,
-                backgroundColor: '#f9fafb',
-                cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmSendForApproval}
-              disabled={!selectedHodId || loadingHods}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: !selectedHodId || loadingHods ? '#9ca3af' : '#4f46e5',
-                color: 'white',
-                border: 'none',
-                borderRadius: 4,
-                cursor: !selectedHodId || loadingHods ? 'not-allowed' : 'pointer'
-              }}
-            >
-              Send for Approval
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Update the event status display in the table
   return (
     <div className="dashboard-layout fix-layout">
       {/* Sidebar */}
@@ -440,7 +237,6 @@ const EventList = () => {
                       <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>Status</th>
                       <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>Created On</th>
                       <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>Updated On</th>
-                      <th style={{ textAlign: 'center', padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>Send for Approval</th>
                       <th style={{ textAlign: 'right', padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>Actions</th>
                     </tr>
                   </thead>
@@ -450,44 +246,10 @@ const EventList = () => {
                         <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>{event.name}</td>
                         <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>{event.department?.name || 'N/A'}</td>
                         <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
-                          <span style={{ 
-                            padding: '0.25rem 0.5rem', 
-                            borderRadius: 9999, 
-                            background: event.status === 'pending' ? '#fef3c7' : 
-                                      event.status === 'approved' ? '#dcfce7' : 
-                                      event.status === 'rejected' ? '#fee2e2' :
-                                      '#f3f4f6',
-                            color: event.status === 'pending' ? '#92400e' : 
-                                   event.status === 'approved' ? '#15803d' :
-                                   event.status === 'rejected' ? '#b91c1c' :
-                                   '#4b5563',
-                            fontSize: '0.75rem' 
-                          }}>
-                            {event.status === 'not_send_for_approval' || !event.status ? 
-                              'Not Sent for Approval' : 
-                              event.status?.charAt(0).toUpperCase() + event.status?.slice(1)}
-                          </span>
+                          <span style={{ padding: '0.25rem 0.5rem', borderRadius: 9999, background: '#f3f4f6', fontSize: '0.75rem' }}>{event.status?.charAt(0).toUpperCase() + event.status?.slice(1) || 'Pending'}</span>
                         </td>
                         <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>{new Date(event.createdAt).toLocaleDateString()}</td>
                         <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>{event.updatedAt ? new Date(event.updatedAt).toLocaleDateString() : '-'}</td>
-                        <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
-                          <button 
-                            onClick={() => handleSendForApproval(event.id)} 
-                            disabled={event.status === 'pending' || event.status === 'approved'}
-                            style={{
-                              padding: '0.5rem 0.75rem',
-                              background: event.status === 'pending' || event.status === 'approved' ? '#e5e7eb' : '#4f46e5',
-                              color: event.status === 'pending' || event.status === 'approved' ? '#9ca3af' : 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: event.status === 'pending' || event.status === 'approved' ? 'not-allowed' : 'pointer',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            {event.status === 'pending' ? 'Pending Approval' : 
-                             event.status === 'approved' ? 'Approved' : 'Send for Approval'}
-                          </button>
-                        </td>
                         <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                             <button onClick={() => navigate(`/company-admin/events/edit/${event.id}`)} title="Edit" style={{ padding: '0.5rem', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}>✏️</button>
@@ -504,9 +266,6 @@ const EventList = () => {
         </div>
       </main>
 
-      {/* Render the HOD selection modal */}
-      {renderHodModal()}
-
       {/* Simple styles fix */}
       <style jsx global>{`
         .fix-layout { display: grid; grid-template-columns: 260px 1fr; width: 100%; height: 100vh; overflow: hidden; }
@@ -520,4 +279,4 @@ const EventList = () => {
   );
 };
 
-export default EventList;
+export default EventList; 

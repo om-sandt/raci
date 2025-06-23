@@ -6,7 +6,6 @@ import UserProfile from './UserProfile';
 import TasksAssigned from './TasksAssigned';
 import TaskCalendar from './TaskCalendar';
 import HelpSupport from './HelpSupport';
-import EventApprovals from './EventApprovals';
 import authService from '../../src/services/auth.service';
 
 const UserDashboard = () => {
@@ -257,12 +256,6 @@ const UserDashboard = () => {
             <i className="icon">❓</i> Help & Support
           </NavLink>
           
-          {user.role?.toLowerCase() === 'hod' && (
-            <NavLink to="/user/event-approvals" className="nav-item">
-              <i className="icon">📝</i> Pending Approvals
-            </NavLink>
-          )}
-          
           <button className="nav-item" onClick={handleLogout} style={{
             width: '100%',
             textAlign: 'left',
@@ -312,7 +305,6 @@ const UserDashboard = () => {
             />} />
             <Route path="/tasks/calendar" element={<TaskCalendar />} />
             <Route path="/help" element={<HelpSupport />} />
-            <Route path="/event-approvals" element={<EventApprovals userData={user} />} />
           </Routes>
         </div>
       </main>
