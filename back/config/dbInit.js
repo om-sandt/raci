@@ -164,6 +164,62 @@ const initializeDatabase = async () => {
       );
     `);
 
+    // Create tasks table if it doesn't exist
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        task_id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        event_id INT REFERENCES events(event_id) ON DELETE CASCADE,
+        status TEXT DEFAULT 'not_started',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create designations reference table if it doesn't exist
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS designations (
+        designation_id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create locations reference table if it doesn't exist
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS locations (
+        location_id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Add missing columns and constraints
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS otp TEXT;`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS photo TEXT;`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS location TEXT;`);
+    await db.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS pan_id TEXT;`);
+    await db.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS project_name TEXT;`);
+    await db.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS project_logo TEXT;`);
+    await db.query(`ALTER TABLE raci_assignments ADD COLUMN IF NOT EXISTS task_id INT REFERENCES tasks(task_id) ON DELETE CASCADE;`);
+    await db.query(`ALTER TABLE raci_assignments ADD COLUMN IF NOT EXISTS level INT;`);
+
+    // Create indexes for performance
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_users_department_id ON users(department_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_departments_company_id ON departments(company_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_events_department_id ON events(department_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_tasks_event_id ON tasks(event_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_raci_assignments_task_id ON raci_assignments(task_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_raci_assignments_user_id ON raci_assignments(user_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_event_trackers_event_id ON event_trackers(event_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_event_trackers_user_id ON event_trackers(user_id);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_designations_name ON designations(name);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(name);`);
+
     console.log('Database schema initialization completed successfully!');
   } catch (error) {
     console.error('Error initializing database schema:', error);

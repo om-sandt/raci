@@ -8,9 +8,12 @@ const logger = require('../utils/logger');
 // @access  Private (company-admin or HOD)
 exports.createEvent = async (req, res, next) => {
   try {
-    const { name, description, departmentId, employees, tasks, priority, eventType } = req.body;
+    const { name, description, departmentId, employees, tasks, priority, eventType, status } = req.body;
     const createdBy = req.user.user_id;
     let documentPath = null;
+
+    // Default approval status if not provided
+    const approvalStatus = status || 'not_send_for_approval';
 
     // Handle document upload
     if (req.file) {
@@ -36,10 +39,10 @@ exports.createEvent = async (req, res, next) => {
 
       // Create event
       const result = await db.query(
-        `INSERT INTO events (name, description, priority, event_type, department_id, hod_id, created_by, document_path)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO events (name, description, priority, event_type, department_id, hod_id, created_by, document_path, approval_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING event_id, name, description, priority, event_type, department_id, hod_id, created_by, document_path, approval_status, created_at`,
-        [name, description, priority || null, eventType || null, departmentId, hodId, createdBy, documentPath]
+        [name, description, priority || null, eventType || null, departmentId, hodId, createdBy, documentPath, approvalStatus]
       );
 
       const event = result.rows[0];

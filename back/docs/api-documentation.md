@@ -12,6 +12,7 @@
 - [User RACI Assignments](#user-raci-assignments)
 - [HOD Department Management](#hod-department-management)
 - [Meeting Management](#meeting-management)
+- [Reference Data Management](#reference-data-management)
 - [Dashboard & Analytics](#dashboard--analytics)
 
 ## Overview
@@ -194,7 +195,7 @@ Error response example:
     "password": "admin123"
   }
   ```
-- **Success Response**:
+- **Success Response** (Main Admin):
   ```json
   {
     "token": "jwt-token-here",
@@ -204,7 +205,26 @@ Error response example:
       "name": "Om Vataliya",
       "email": "omvataliya23@gmail.com",
       "role": "website_admin",
-      "phone": "6351497589"
+      "phone": "6351497589",
+      "canCreateAdmins": true,
+      "isMainAdmin": true
+    }
+  }
+  ```
+
+- **Success Response** (Other Admin):
+  ```json
+  {
+    "token": "jwt-token-here",
+    "refreshToken": "refresh-token-here",
+    "user": {
+      "id": 2,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "website_admin",
+      "phone": "1234567890",
+      "canCreateAdmins": false,
+      "isMainAdmin": false
     }
   }
   ```
@@ -249,8 +269,11 @@ Error response example:
 
 - **URL**: `/website-admins`
 - **Method**: `POST`
-- **Auth required**: Yes (website_admin)
+- **Auth required**: Yes (website_admin with permission)
 - **Description**: Create a new website admin
+- **PERMISSION SYSTEM**: 
+  - **Main Admin**: `omvataliya23@gmail.com` always has permission
+  - **Other Admins**: Must have `canCreateAdmins` permission granted by main admin
 - **Request Body**:
   ```json
   {
@@ -269,10 +292,130 @@ Error response example:
       "full_name": "New Admin",
       "email": "admin@example.com",
       "phone": "1234567890",
+      "canCreateAdmins": false,
       "created_at": "2023-07-21T12:00:00Z"
     }
   }
   ```
+- **Error Response** (Unauthorized):
+  ```json
+  {
+    "success": false,
+    "message": "You are not authorized to create website admins. Contact omvataliya23@gmail.com for permission."
+  }
+  ```
+
+### Get All Website Admins
+
+- **URL**: `/website-admins`
+- **Method**: `GET`
+- **Auth required**: Yes (website_admin)
+- **Description**: Get all website admins with their permission status
+- **Success Response**:
+  ```json
+  [
+    {
+      "id": 1,
+      "fullName": "Om Vataliya",
+      "email": "omvataliya23@gmail.com",
+      "phone": "6351497589",
+      "canCreateAdmins": true,
+      "createdAt": "2023-07-20T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "fullName": "John Doe",
+      "email": "john@example.com",
+      "phone": "1234567890",
+      "canCreateAdmins": false,
+      "createdAt": "2023-07-21T12:00:00Z"
+    }
+  ]
+  ```
+
+### Update Website Admin Permissions
+
+- **URL**: `/website-admins/{id}/permissions`
+- **Method**: `PATCH`
+- **Auth required**: Yes (ONLY omvataliya23@gmail.com)
+- **Description**: Grant or revoke admin creation permissions
+- **Request Body**:
+  ```json
+  {
+    "canCreateAdmins": true
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Admin permissions granted successfully",
+    "data": {
+      "id": 2,
+      "fullName": "John Doe",
+      "email": "john@example.com",
+      "phone": "1234567890",
+      "canCreateAdmins": true,
+      "updatedAt": "2023-07-21T13:00:00Z"
+    }
+  }
+  ```
+
+### Frontend Implementation Guide
+
+#### Permission Checking
+
+```javascript
+// After login, check if user can create admins
+const user = loginResponse.user;
+const canCreateAdmins = user.canCreateAdmins;
+const isMainAdmin = user.isMainAdmin;
+
+// Show/hide create admin button
+if (canCreateAdmins) {
+  // Show create admin form
+} else {
+  // Hide create admin functionality
+}
+
+// Show/hide permission management (only for main admin)
+if (isMainAdmin) {
+  // Show permission toggle buttons for other admins
+} else {
+  // Hide permission management
+}
+```
+
+#### Granting Permissions
+
+```javascript
+const grantPermission = async (adminId, canCreate) => {
+  try {
+    const response = await fetch(`/api/website-admins/${adminId}/permissions`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        canCreateAdmins: canCreate
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Update UI to reflect new permission status
+      console.log(result.message);
+    } else {
+      // Handle error
+      console.error(result.message);
+    }
+  } catch (error) {
+    console.error('Permission update failed:', error);
+  }
+};
+```
 
 ### Update Website Admin
 
@@ -315,7 +458,13 @@ Error response example:
     "message": "Website admin deleted successfully"
   }
   ```
-- **Error Response** (when trying to delete last admin):
+- **Error Response** (when meeting not found or access denied):
+  ```json
+  {
+    "success": false,
+    "message": "Meeting not found or access denied"
+  }
+  ```
   ```json
   {
     "success": false,
@@ -1026,10 +1175,10 @@ Error response example:
 
 ### Create RACI Matrix
 
-- **URL**: `/api/raci-matrices`
+- **URL**: `/api/raci`
 - **Method**: `POST`
 - **Auth required**: Yes (company_admin or hod)
-- **Description**: Create a RACI matrix using existing event tasks
+- **Description**: Create a RACI matrix using existing event tasks with hierarchy levels
 - **Request Body**:
   ```json
   {
@@ -1049,6 +1198,15 @@ Error response example:
           "task-1-consulted-5": { "min": 200, "max": 1500 },
           "task-1-informed-6": { "min": 0, "max": 500 },
           "task-1-informed-7": { "min": 100, "max": 800 }
+        },
+        "levels": {
+          "task-1-responsible-1": 1,
+          "task-1-responsible-2": 2,
+          "task-1-accountable-3": 1,
+          "task-1-consulted-4": 1,
+          "task-1-consulted-5": 2,
+          "task-1-informed-6": 3,
+          "task-1-informed-7": 3
         }
       }
     ]
@@ -1062,6 +1220,20 @@ Error response example:
   - `userId` is the user identifier
   
   Each financial limit object should contain `min` and/or `max` values representing currency amounts.
+
+- **Note on Hierarchy Levels**:
+  Levels can be set for all RACI assignments to create hierarchical structures. The key format is:
+  `task-{taskId}-{role}-{userId}` where:
+  - `taskId` is the task identifier
+  - `role` is one of "responsible", "accountable", "consulted", or "informed"
+  - `userId` is the user identifier
+  
+  Each level should be an integer (1, 2, 3, etc.) where:
+  - Level 1 represents the highest/primary level
+  - Level 2 represents the secondary level
+  - Level 3+ represents subsequent levels in the hierarchy
+  
+  This allows for multiple employees at different levels within the same RACI role, forming a hierarchical structure for single or groups of employees.
   
 - **Success Response**:
   ```json
@@ -1071,22 +1243,740 @@ Error response example:
   }
   ```
 
+### Get RACI Matrix by Event
+
+- **URL**: `/api/raci/events/:eventId`
+- **Method**: `GET`
+- **Auth required**: Yes (company member)
+- **Description**: Get RACI matrix details for a specific event
+- **Success Response**:
+  ```json
+  {
+    "eventId": 1,
+    "name": "Event Name",
+    "department": {
+      "id": 1,
+      "name": "Department Name"
+    },
+    "tasks": [
+      {
+        "id": 1,
+        "name": "Task Name",
+        "description": "Task Description",
+        "status": "not_started",
+        "raci": {
+          "responsible": [
+            {
+              "id": 1,
+              "name": "John Doe",
+              "email": "john@example.com",
+              "role": "user",
+              "designation": "Developer",
+              "level": 1,
+              "financialLimits": {
+                "min": 1000,
+                "max": 5000
+              }
+            },
+            {
+              "id": 2,
+              "name": "Jane Smith",
+              "email": "jane@example.com",
+              "role": "user",
+              "designation": "Senior Developer",
+              "level": 2,
+              "financialLimits": {
+                "min": 500,
+                "max": 2000
+              }
+            }
+          ],
+          "accountable": [
+            {
+              "id": 3,
+              "name": "Bob Johnson",
+              "email": "bob@example.com",
+              "role": "hod",
+              "designation": "Team Lead",
+              "level": 1,
+              "financialLimits": {
+                "min": 5000,
+                "max": 10000
+              }
+            }
+          ],
+          "consulted": [],
+          "informed": []
+        }
+      }
+    ],
+    "hasApprovals": true,
+    "approvalStatus": {
+      "overall": "PENDING",
+      "total": 6,
+      "approved": 3,
+      "rejected": 0,
+      "pending": 3
+    },
+    "approvalSummary": [
+      {
+        "approval_level": 1,
+        "status": "APPROVED",
+        "count": "3",
+        "approver_name": "Jane Smith",
+        "approver_email": "jane@example.com",
+        "last_updated": "2023-07-20T14:30:00.000Z",
+        "reason": "Looks good to proceed"
+      },
+      {
+        "approval_level": 2,
+        "status": "PENDING",
+        "count": "3",
+        "approver_name": "Bob Johnson",
+        "approver_email": "bob@example.com",
+        "last_updated": "2023-07-20T10:00:00.000Z",
+        "reason": null
+      }
+    ]
+  }
+  ```
+
 ### Update RACI Matrix
 
-- **URL**: `/api/raci-matrices/:eventId`
+- **URL**: `/api/raci/:eventId`
 - **Method**: `PUT`
 - **Auth required**: Yes (matrix creator, company_admin)
-- **Description**: Update RACI matrix details for an existing event
-- **Request Body**: Same format as Create RACI Matrix
+- **Description**: Update RACI matrix details for an existing event with hierarchy levels
+- **Request Body**: Same format as Create RACI Matrix (including levels parameter)
 - **Note on Financial Limits**: Same as Create RACI Matrix
+- **Note on Hierarchy Levels**: Same as Create RACI Matrix
 
 ### Delete RACI Matrix
 
-- **URL**: `/raci-matrices/{id}`
+- **URL**: `/api/raci/{id}`
 - **Method**: `DELETE`
 - **Auth required**: Yes (matrix creator, company_admin)
 - **Description**: Delete a RACI matrix
 - **Status**: Not yet implemented
+
+## RACI Approval Management
+
+### Create RACI Approval Requests
+
+- **URL**: `/api/raci/{eventId}/approvals`
+- **Method**: `POST`
+- **Auth required**: Yes (company_admin or hod)
+- **Description**: Create approval requests for a RACI matrix. Choose two people for approval (can be normal users or HOD) based on level.
+- **Request Body**:
+  ```json
+  {
+    "approvers": [
+      {
+        "userId": 5,
+        "approvalLevel": 1
+      },
+      {
+        "userId": 8,
+        "approvalLevel": 2
+      }
+    ]
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "RACI approval requests created successfully",
+    "eventId": 1,
+    "approvalsCreated": 12
+  }
+  ```
+
+### Get Pending RACI Approvals
+
+- **URL**: `/api/raci/approvals/pending`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Description**: Get all pending RACI approvals for the current user
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "pendingApprovals": [
+      {
+        "eventId": 1,
+        "eventName": "Project Alpha Launch",
+        "eventDescription": "Launch of Project Alpha",
+        "departmentName": "Engineering",
+        "approvals": [
+          {
+            "approvalId": 15,
+            "approvalLevel": 1,
+            "status": "pending",
+            "createdAt": "2023-07-20T10:00:00.000Z",
+            "taskName": "Code Review",
+            "taskDescription": "Review code changes",
+            "assignedUserName": "John Doe",
+            "raciType": "R",
+            "raciLevel": 1
+          }
+        ]
+      }
+    ]
+  }
+  ```
+
+### Get My RACI Approval History
+
+- **URL**: `/api/raci/approvals/my-history`
+- **Method**: `GET`
+- **Auth required**: Yes (hod, user with approval permissions)
+- **Description**: Get approval history for the current user - shows all past approval decisions (approved/rejected)
+- **Query Parameters**:
+  - `page`: Page number (default: 1)
+  - `pageSize`: Items per page (default: 10)
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "totalItems": 25,
+    "totalPages": 3,
+    "currentPage": 1,
+    "summary": {
+      "totalDecisions": 25,
+      "approved": 20,
+      "rejected": 5
+    },
+    "approvalHistory": [
+      {
+        "eventId": 1,
+        "eventName": "Project Alpha Launch",
+        "eventDescription": "Launch of Project Alpha",
+        "eventStatus": "approved",
+        "department": {
+          "id": 1,
+          "name": "Engineering"
+        },
+        "company": {
+          "id": 1,
+          "name": "ACME Corporation"
+        },
+        "approvals": [
+          {
+            "approvalId": 15,
+            "approvalLevel": 1,
+            "status": "APPROVED",
+            "reason": "Looks good to proceed",
+            "approvedAt": "2023-07-20T14:30:00.000Z",
+            "createdAt": "2023-07-20T10:00:00.000Z",
+            "updatedAt": "2023-07-20T14:30:00.000Z",
+            "raciAssignment": {
+              "id": 45,
+              "type": "R",
+              "level": 1,
+              "financialLimits": {
+                "min": 1000,
+                "max": 5000
+              }
+            },
+            "task": {
+              "id": 12,
+              "name": "Code Review",
+              "description": "Review code changes",
+              "status": "not_started"
+            },
+            "assignedUser": {
+              "id": 101,
+              "name": "John Doe",
+              "email": "john@example.com",
+              "role": "user",
+              "designation": "Senior Developer",
+              "phone": "+1234567890",
+              "employeeId": "ENG-001"
+            }
+          }
+        ]
+      },
+      {
+        "eventId": 2,
+        "eventName": "Product Beta Testing",
+        "eventDescription": "Beta testing phase",
+        "eventStatus": "approved",
+        "department": {
+          "id": 2,
+          "name": "QA"
+        },
+        "company": {
+          "id": 1,
+          "name": "ACME Corporation"
+        },
+        "approvals": [
+          {
+            "approvalId": 25,
+            "approvalLevel": 2,
+            "status": "REJECTED",
+            "reason": "Budget allocation needs revision",
+            "approvedAt": "2023-07-19T16:45:00.000Z",
+            "createdAt": "2023-07-19T12:00:00.000Z",
+            "updatedAt": "2023-07-19T16:45:00.000Z",
+            "raciAssignment": {
+              "id": 67,
+              "type": "A",
+              "level": 1,
+              "financialLimits": {
+                "min": 5000,
+                "max": 15000
+              }
+            },
+            "task": {
+              "id": 18,
+              "name": "Budget Approval",
+              "description": "Approve testing budget",
+              "status": "not_started"
+            },
+            "assignedUser": {
+              "id": 102,
+              "name": "Jane Smith",
+              "email": "jane@example.com",
+              "role": "hod",
+              "designation": "QA Manager",
+              "phone": "+1234567891",
+              "employeeId": "QA-001"
+            }
+          }
+        ]
+      }
+    ],
+    "message": "Retrieved 2 events with approval history"
+  }
+  ```
+- **Empty Response** (when no history exists):
+  ```json
+  {
+    "success": true,
+    "message": "No approval history found",
+    "totalItems": 0,
+    "totalPages": 0,
+    "currentPage": 1,
+    "approvalHistory": []
+  }
+  ```
+
+### Get RACI Matrix for Approval (Read-Only View)
+
+- **URL**: `/api/raci/{eventId}/approval-view`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Description**: Get read-only view of RACI matrix for approval. User must have pending approvals for this event.
+- **Success Response**:
+  ```json
+  {
+    "eventId": 1,
+    "name": "Project Alpha Launch",
+    "description": "Launch of Project Alpha",
+    "department": {
+      "id": 1,
+      "name": "Engineering"
+    },
+    "tasks": [
+      {
+        "id": 1,
+        "name": "Code Review",
+        "description": "Review code changes",
+        "status": "not_started",
+        "raci": {
+          "responsible": [
+            {
+              "id": 1,
+              "name": "John Doe",
+              "email": "john@example.com",
+              "role": "user",
+              "designation": "Developer",
+              "level": 1,
+              "financialLimits": {
+                "min": 1000,
+                "max": 5000
+              }
+            }
+          ],
+          "accountable": [],
+          "consulted": [],
+          "informed": []
+        }
+      }
+    ],
+    "approvalSummary": [
+      {
+        "approval_level": 1,
+        "count": "6"
+      }
+    ],
+    "isReadOnly": true
+  }
+  ```
+
+### Approve/Reject RACI Matrix
+
+- **URL**: `/api/raci/{eventId}/approve`
+- **Method**: `POST`
+- **Auth required**: Yes
+- **Description**: Approve or reject RACI matrix. For approve, reason is optional. For reject, reason is compulsory.
+- **Request Body for Approval**:
+  ```json
+  {
+    "action": "approve",
+    "reason": "Looks good to proceed" // Optional for approve
+  }
+  ```
+- **Request Body for Rejection**:
+  ```json
+  {
+    "action": "reject",
+    "reason": "Budget allocation needs revision" // Required for reject
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "RACI matrix approved successfully",
+    "action": "approved",
+    "eventId": 1,
+    "approvalsUpdated": 6
+  }
+  ```
+
+### Get RACI Approval Status
+
+- **URL**: `/api/raci/{eventId}/approval-status`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Description**: Get approval status summary for a RACI matrix
+- **Success Response**:
+  ```json
+  {
+    "eventId": 1,
+    "eventName": "Project Alpha Launch",
+    "overallStatus": "pending",
+    "summary": {
+      "total": 12,
+      "approved": 6,
+      "rejected": 0,
+      "pending": 6
+    },
+    "approvalsByLevel": [
+      {
+        "approval_level": 1,
+        "status": "approved",
+        "count": "6",
+        "approver_name": "Jane Smith",
+        "approver_email": "jane@example.com"
+      },
+      {
+        "approval_level": 2,
+        "status": "pending",
+        "count": "6",
+        "approver_name": "Bob Johnson",
+        "approver_email": "bob@example.com"
+      }
+    ],
+    "detailedApprovals": [
+      {
+        "approval_id": 15,
+        "approval_level": 1,
+        "status": "approved",
+        "reason": "Looks good",
+        "approved_at": "2023-07-20T14:30:00.000Z",
+        "approver_name": "Jane Smith",
+        "approver_email": "jane@example.com"
+      }
+    ]
+  }
+  ```
+
+### Get Eligible Approvers
+
+- **URL**: `/api/raci/eligible-approvers`
+- **Method**: `GET`
+- **Auth required**: Yes (company_admin or hod)
+- **Query Parameters**:
+  - `level`: Optional level filter
+- **Description**: Get users eligible for RACI approval based on their approval_assign flag and level
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "eligibleApprovers": [
+      {
+        "id": 5,
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "role": "hod",
+        "designation": "Department Head",
+        "department": "Engineering"
+      },
+      {
+        "id": 8,
+        "name": "Bob Johnson",
+        "email": "bob@example.com",
+        "role": "user",
+        "designation": "Senior Manager",
+        "department": "Engineering"
+      }
+    ]
+  }
+  ```
+
+## Meeting Management
+
+> ✅ **Company Filtering Implemented**: Meeting endpoints now use intelligent company-based access control. Users can only see meetings from their company, meetings where they are guests, or meetings they created.
+
+### Current Implementation Status
+- ✅ **Working**: Create, read, update, delete meetings
+- ✅ **Working**: Calendar view with date filtering  
+- ✅ **Working**: Guest user associations
+- ✅ **Implemented**: Company-based access control via event filtering
+- ✅ **Security**: Proper authorization checks for all operations
+- ✅ **Optimized**: Clean company filtering logic using event-based approach
+
+### Access Control Rules
+Users can access meetings if any of these conditions are met:
+1. **Company Events**: Meeting belongs to an event that is assigned to a department in the user's company
+2. **Guest Access**: User is listed as a guest in the meeting (`guest_user_ids`)
+
+**Company Filtering Logic:**
+- System first finds all events belonging to departments in the user's company
+- Then shows only meetings that are linked to those events OR where the user is a guest
+- This ensures clean company-based data separation
+
+### Create Meeting
+
+- **URL**: `/api/meetings`
+- **Method**: `POST`
+- **Auth required**: Yes (company member)
+- **Description**: Create a new meeting for an event
+- **Request Body**:
+  ```json
+  {
+    "eventId": 1,
+    "title": "Project Planning Meeting",
+    "description": "Discussion about project milestones",
+    "meetingDate": "2023-07-25T14:00:00.000Z",
+    "guestUserIds": [5, 8, 12], // Can also be comma-separated string
+    "meetingUrl": "https://zoom.us/j/123456789"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "id": 10,
+    "title": "Project Planning Meeting",
+    "description": "Discussion about project milestones",
+    "meetingDate": "2023-07-25T14:00:00.000Z",
+    "meetingUrl": "https://zoom.us/j/123456789",
+    "event": {
+      "id": 1,
+      "name": "Project Alpha Launch"
+    },
+    "guests": [
+      {
+        "id": 5,
+        "name": "Jane Smith"
+      },
+      {
+        "id": 8,
+        "name": "Bob Johnson"
+      }
+    ],
+    "createdAt": "2023-07-20T10:00:00.000Z"
+  }
+  ```
+
+### Get All Meetings
+
+- **URL**: `/api/meetings`
+- **Method**: `GET`
+- **Auth required**: Yes (authenticated user)
+- **Query Parameters**:
+  - `eventId`: Filter by event ID
+  - `startDate`: Filter meetings from this date
+  - `endDate`: Filter meetings until this date
+  - `page`: Page number (default: 1)
+  - `limit`: Items per page (default: 10)
+- **Description**: Get meetings accessible to the current user based on company association, guest status, or admin privileges
+- **Access Control**: Returns only meetings that the user has permission to view according to company filtering rules
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "totalItems": 25,
+    "totalPages": 3,
+    "currentPage": 1,
+    "meetings": [
+      {
+        "id": 10,
+        "title": "Project Planning Meeting",
+        "description": "Discussion about project milestones",
+        "meetingDate": "2023-07-25T14:00:00.000Z",
+        "meetingUrl": "https://zoom.us/j/123456789",
+        "event": {
+          "id": 1,
+          "name": "Project Alpha Launch"
+        },
+        "department": {
+          "name": "Engineering"
+        },
+        "guests": [
+          {
+            "id": 5,
+            "name": "Jane Smith"
+          }
+        ]
+      }
+    ],
+    "message": "Retrieved 25 meetings"
+  }
+  ```
+
+### Get Meeting by ID
+
+- **URL**: `/api/meetings/{id}`
+- **Method**: `GET`
+- **Auth required**: Yes (authenticated user)
+- **Description**: Get detailed information about a specific meeting (if user has access)
+- **Access Control**: Returns meeting details only if the user has permission to view the meeting according to company filtering rules
+- **Success Response**:
+  ```json
+  {
+    "id": 10,
+    "title": "Project Planning Meeting",
+    "description": "Discussion about project milestones",
+    "meetingDate": "2023-07-25T14:00:00.000Z",
+    "meetingUrl": "https://zoom.us/j/123456789",
+    "event": {
+      "id": 1,
+      "name": "Project Alpha Launch"
+    },
+    "department": {
+      "name": "Engineering"
+    },
+    "guests": [
+      {
+        "id": 5,
+        "name": "Jane Smith",
+        "email": "jane@example.com"
+      }
+    ],
+    "createdAt": "2023-07-20T10:00:00.000Z",
+    "updatedAt": "2023-07-20T10:00:00.000Z"
+  }
+  ```
+
+### Update Meeting
+
+- **URL**: `/api/meetings/{id}`
+- **Method**: `PUT`
+- **Auth required**: Yes (meeting creator, company_admin or HOD)
+- **Description**: Update meeting details (if user has access)
+- **Access Control**: Can only update meetings that the user has permission to modify
+- **Request Body**: Same as create meeting (all fields optional)
+- **Success Response**: Updated meeting object
+
+### Delete Meeting
+
+- **URL**: `/api/meetings/{id}`
+- **Method**: `DELETE`
+- **Auth required**: Yes (meeting creator, company_admin or HOD)
+- **Description**: Delete a meeting (if user has access)
+- **Access Control**: Can only delete meetings that the user has permission to modify
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Meeting deleted successfully"
+  }
+  ```
+
+
+
+### Get Meetings by Date Range (Calendar View)
+
+- **URL**: `/api/meetings/calendar`
+- **Method**: `GET`
+- **Auth required**: Yes (authenticated user)
+- **Query Parameters**:
+  - `startDate`: Start date for date range (required if `date` not provided)
+  - `endDate`: End date for date range (required if `date` not provided)
+  - `date`: Single date for daily view (required if `startDate` and `endDate` not provided)
+- **Description**: Get meetings within a date range or for a specific date for calendar display, filtered by user access permissions
+- **Access Control**: Returns only meetings within the date range that the user has permission to view according to company filtering rules
+- **Success Response**:
+      ```json
+    {
+      "success": true,
+      "calendarEvents": [
+        {
+          "id": 5,
+          "title": "esrdtfyguhfytf",
+          "description": "r76r76r76r",
+          "meetingDate": "2025-06-29T13:08:00.000Z",
+          "start": "2025-06-29T13:08:00.000Z",
+          "meetingUrl": "https://meet.google.com/wje-yjnp-nww",
+          "event": {
+            "id": 83,
+            "name": "Event Name",
+            "description": "Event Description"
+          },
+          "department": {
+            "id": 1,
+            "name": "Engineering"
+          },
+          "guests": [
+            {
+              "id": 81,
+              "name": "User Name",
+              "email": "user@example.com"
+            }
+          ],
+          "createdAt": "2025-06-29T13:08:26.730Z",
+          "updatedAt": "2025-06-29T13:08:26.730Z"
+        }
+      ],
+      "meetings": [
+        {
+          "id": 5,
+          "title": "esrdtfyguhfytf",
+          "description": "r76r76r76r",
+          "meetingDate": "2025-06-29T13:08:00.000Z",
+          "start": "2025-06-29T13:08:00.000Z",
+          "meetingUrl": "https://meet.google.com/wje-yjnp-nww",
+          "event": {
+            "id": 83,
+            "name": "Event Name",
+            "description": "Event Description"
+          },
+          "department": {
+            "id": 1,
+            "name": "Engineering"
+          },
+          "guests": [
+            {
+              "id": 81,
+              "name": "User Name",
+              "email": "user@example.com"
+            }
+          ],
+          "createdAt": "2025-06-29T13:08:26.730Z",
+          "updatedAt": "2025-06-29T13:08:26.730Z"
+        }
+      ],
+      "totalItems": 1,
+      "dateRange": {
+        "start": "2025-06-29T00:00:00.000Z",
+        "end": "2025-06-30T00:00:00.000Z"
+      }
+    }
+    ```
 
 ## User RACI Assignments
 
@@ -1118,7 +2008,8 @@ Error response example:
     "raciAssignments": [
       {
         "id": 1,
-        "role": "R",
+        "type": "R",
+        "level": 1,
         "financialLimits": {
           "min": 1000,
           "max": 5000
@@ -1182,7 +2073,8 @@ Error response example:
           "email": "alice@company.com",
           "role": "user"
         },
-        "role": "R",
+        "type": "R",
+        "level": 1,
         "financialLimits": { "min": 1000, "max": 5000 },
         "task": {
           "id": 10,
@@ -1240,7 +2132,8 @@ Error response example:
     "data": [
       {
         "id": 1,
-        "role": "R",
+        "type": "R",
+        "level": 1,
         "financialLimits": { "min": 1000, "max": 5000 },
         "task": {
           "id": 10,
@@ -1354,6 +2247,7 @@ Error response example:
               "name": "John Doe",
               "email": "john@example.com",
               "designation": "Senior Developer",
+              "level": 1,
               "financialLimits": {
                 "min": 1000,
                 "max": 5000
@@ -1366,6 +2260,7 @@ Error response example:
               "name": "Jane Smith",
               "email": "jane@example.com",
               "designation": "Team Lead",
+              "level": 1,
               "financialLimits": null
             }
           ],
@@ -1445,6 +2340,234 @@ OR
 - **Auth required**: Yes (meeting organizer, company_admin)
 - **Description**: Delete a meeting
 - **Status**: Not yet implemented
+
+## Reference Data Management
+
+The following reference tables are used to populate dropdown options in the user creation form within the company admin interface. These are pure reference data tables with no foreign key relationships to other entities.
+
+### Designations Reference Table
+
+Used to populate the designation dropdown in the user creation form.
+
+#### Get All Designations
+
+- **URL**: `/api/designations`
+- **Method**: `GET`
+- **Auth required**: Yes (company_admin)
+- **Description**: Get all available designations for dropdown selection
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": 1,
+        "name": "Software Engineer",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "name": "Project Manager",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      },
+      {
+        "id": 3,
+        "name": "Team Lead",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      }
+    ]
+  }
+  ```
+
+#### Create Designation
+
+- **URL**: `/api/designations`
+- **Method**: `POST`
+- **Auth required**: Yes (company_admin)
+- **Description**: Create a new designation
+- **Request Body**:
+  ```json
+  {
+    "name": "Senior Software Engineer"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 4,
+      "name": "Senior Software Engineer",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+#### Update Designation
+
+- **URL**: `/api/designations/{id}`
+- **Method**: `PUT`
+- **Auth required**: Yes (company_admin)
+- **Description**: Update an existing designation
+- **Request Body**:
+  ```json
+  {
+    "name": "Senior Software Developer"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 4,
+      "name": "Senior Software Developer",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+#### Delete Designation
+
+- **URL**: `/api/designations/{id}`
+- **Method**: `DELETE`
+- **Auth required**: Yes (company_admin)
+- **Description**: Delete a designation
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Designation deleted successfully"
+  }
+  ```
+
+### Locations Reference Table
+
+Used to populate the location dropdown in the user creation form.
+
+#### Get All Locations
+
+- **URL**: `/api/locations`
+- **Method**: `GET`
+- **Auth required**: Yes (company_admin)
+- **Description**: Get all available locations for dropdown selection
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": 1,
+        "name": "New York, USA",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "name": "London, UK",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      },
+      {
+        "id": 3,
+        "name": "Mumbai, India",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      }
+    ]
+  }
+  ```
+
+#### Create Location
+
+- **URL**: `/api/locations`
+- **Method**: `POST`
+- **Auth required**: Yes (company_admin)
+- **Description**: Create a new location
+- **Request Body**:
+  ```json
+  {
+    "name": "Toronto, Canada"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 4,
+      "name": "Toronto, Canada",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+#### Update Location
+
+- **URL**: `/api/locations/{id}`
+- **Method**: `PUT`
+- **Auth required**: Yes (company_admin)
+- **Description**: Update an existing location
+- **Request Body**:
+  ```json
+  {
+    "name": "Toronto, ON, Canada"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 4,
+      "name": "Toronto, ON, Canada",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+#### Delete Location
+
+- **URL**: `/api/locations/{id}`
+- **Method**: `DELETE`
+- **Auth required**: Yes (company_admin)
+- **Description**: Delete a location
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Location deleted successfully"
+  }
+  ```
+
+### Frontend Implementation Notes
+
+**For User Creation Form:**
+1. **Designation Dropdown**: Fetch designations from `/api/designations` and populate dropdown with `name` values
+2. **Location Dropdown**: Fetch locations from `/api/locations` and populate dropdown with `name` values
+3. **Usage**: When creating a user, send the selected designation and location names as strings (not IDs) in the user creation request
+4. **Management**: Company admins can manage both designations and locations through separate management interfaces
+
+**Example User Creation with Reference Data:**
+```json
+{
+  "name": "John Doe",
+  "email": "john@company.com",
+  "designation": "Senior Software Engineer",  // from designations table
+  "location": "New York, USA",               // from locations table
+  "role": "user",
+  "departmentId": 1
+}
+```
+
+**Note**: These are pure reference tables with no foreign key relationships. The designation and location fields in the users table remain as text fields, but the values are populated from these reference tables to ensure consistency across the application.
 
 ## Dashboard & Analytics
 

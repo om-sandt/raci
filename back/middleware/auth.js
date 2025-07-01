@@ -40,7 +40,8 @@ exports.protect = async (req, res, next) => {
     if (adminResult.rows.length > 0) {
       // This is a website admin
       req.user = {
-        user_id: adminResult.rows[0].admin_id,
+        admin_id: adminResult.rows[0].admin_id,
+        user_id: adminResult.rows[0].admin_id, // Keep for backwards compatibility
         full_name: adminResult.rows[0].full_name,
         email: adminResult.rows[0].email,
         role: 'website_admin',

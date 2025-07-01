@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../utils/logger');
 
 // @desc    Create a new company
 // @route   POST /api/companies
@@ -469,6 +470,280 @@ exports.deleteCompany = async (req, res, next) => {
       message: 'Company deleted successfully'
     });
   } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Create company deletion request
+// @route   POST /api/companies/:id/deletion-request
+// @access  Private (website-admin)
+exports.createDeletionRequest = async (req, res, next) => {
+  try {
+    const companyId = req.params.id;
+    const { approverId, reason } = req.body;
+    
+    // Validate required fields
+    if (!approverId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Approver is required'
+      });
+    }
+
+    // Check if company exists
+    const companyCheck = await db.query(
+      'SELECT name FROM companies WHERE company_id = $1',
+      [companyId]
+    );
+    
+    if (companyCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found'
+      });
+    }
+
+    // Check if approver exists and is different from requester
+    const approverCheck = await db.query(
+      'SELECT admin_id, full_name FROM website_admins WHERE admin_id = $1',
+      [approverId]
+    );
+    
+    if (approverCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Selected approver not found'
+      });
+    }
+
+    if (parseInt(approverId) === req.user.admin_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot select yourself as approver'
+      });
+    }
+
+    // Check if there's already a pending deletion request for this company
+    const existingRequest = await db.query(
+      'SELECT request_id FROM company_deletion_requests WHERE company_id = $1 AND status = $2',
+      [companyId, 'pending']
+    );
+
+    if (existingRequest.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'A deletion request for this company is already pending'
+      });
+    }
+
+    // Create deletion request
+    const { rows } = await db.query(
+      `INSERT INTO company_deletion_requests (company_id, requested_by, approver_id, reason) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING request_id, created_at`,
+      [companyId, req.user.admin_id, approverId, reason]
+    );
+
+    logger.info(`Company deletion request created: Company ${companyId} by admin ${req.user.admin_id}, approver ${approverId}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Deletion request created successfully',
+      data: {
+        requestId: rows[0].request_id,
+        companyName: companyCheck.rows[0].name,
+        approverName: approverCheck.rows[0].full_name,
+        createdAt: rows[0].created_at
+      }
+    });
+  } catch (error) {
+    logger.error(`Error creating deletion request: ${error.message}`);
+    next(error);
+  }
+};
+
+// @desc    Get pending deletion requests for approver
+// @route   GET /api/companies/deletion-requests/pending
+// @access  Private (website-admin)
+exports.getPendingDeletionRequests = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT 
+        cdr.request_id,
+        cdr.company_id,
+        c.name as company_name,
+        c.logo_url,
+        cdr.reason,
+        cdr.created_at,
+        wa.full_name as requested_by_name,
+        wa.email as requested_by_email
+       FROM company_deletion_requests cdr
+       JOIN companies c ON cdr.company_id = c.company_id
+       JOIN website_admins wa ON cdr.requested_by = wa.admin_id
+       WHERE cdr.approver_id = $1 AND cdr.status = 'pending'
+       ORDER BY cdr.created_at DESC`,
+      [req.user.admin_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    logger.error(`Error getting pending deletion requests: ${error.message}`);
+    next(error);
+  }
+};
+
+// @desc    Process deletion request (approve/reject)
+// @route   PUT /api/companies/deletion-requests/:requestId
+// @access  Private (website-admin)
+exports.processDeletionRequest = async (req, res, next) => {
+  try {
+    const { requestId } = req.params;
+    const { action, rejectionReason } = req.body;
+
+    // Validate action
+    if (!action || !['approve', 'reject'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Action must be either "approve" or "reject"'
+      });
+    }
+
+    // If rejecting, reason is required
+    if (action === 'reject' && (!rejectionReason || rejectionReason.trim() === '')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required when rejecting a request'
+      });
+    }
+
+    // Check if request exists and user is the assigned approver
+    const requestCheck = await db.query(
+      `SELECT cdr.*, c.name as company_name, c.logo_url, c.project_logo
+       FROM company_deletion_requests cdr
+       JOIN companies c ON cdr.company_id = c.company_id
+       WHERE cdr.request_id = $1 AND cdr.approver_id = $2 AND cdr.status = 'pending'`,
+      [requestId, req.user.admin_id]
+    );
+
+    if (requestCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Deletion request not found or you are not authorized to process it'
+      });
+    }
+
+    const request = requestCheck.rows[0];
+
+    if (action === 'approve') {
+      // Delete company and its associated files
+      const logoUrl = request.logo_url;
+      if (logoUrl) {
+        const logoPath = path.join(__dirname, '..', logoUrl);
+        if (fs.existsSync(logoPath)) {
+          fs.unlinkSync(logoPath);
+        }
+      }
+
+      const projectLogoToDelete = request.project_logo;
+      if (projectLogoToDelete) {
+        const projectLogoPath = path.join(__dirname, '..', projectLogoToDelete);
+        if (fs.existsSync(projectLogoPath)) {
+          fs.unlinkSync(projectLogoPath);
+        }
+      }
+
+      // Delete company (CASCADE will handle related records)
+      await db.query('DELETE FROM companies WHERE company_id = $1', [request.company_id]);
+      
+      // Update request status
+      await db.query(
+        'UPDATE company_deletion_requests SET status = $1, processed_at = CURRENT_TIMESTAMP WHERE request_id = $2',
+        ['approved', requestId]
+      );
+
+      logger.info(`Company ${request.company_id} deleted by admin ${req.user.admin_id} - request ${requestId} approved`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Company deletion approved and company deleted successfully'
+      });
+    } else {
+      // Reject the request
+      await db.query(
+        'UPDATE company_deletion_requests SET status = $1, reason = $2, processed_at = CURRENT_TIMESTAMP WHERE request_id = $3',
+        ['rejected', rejectionReason, requestId]
+      );
+
+      logger.info(`Company deletion request ${requestId} rejected by admin ${req.user.admin_id}`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Company deletion request rejected successfully'
+      });
+    }
+  } catch (error) {
+    logger.error(`Error processing deletion request: ${error.message}`);
+    next(error);
+  }
+};
+
+// @desc    Get other website admins for approval selection
+// @route   GET /api/companies/deletion-requests/approvers
+// @access  Private (website-admin)
+exports.getAvailableApprovers = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT admin_id as id, full_name as name, email FROM website_admins WHERE admin_id != $1 ORDER BY full_name ASC',
+      [req.user.admin_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    logger.error(`Error getting available approvers: ${error.message}`);
+    next(error);
+  }
+};
+
+// @desc    Get all company deletion requests for website admin dashboard
+// @route   GET /api/companies/deletion-requests/all
+// @access  Private (website-admin)
+exports.getAllDeletionRequests = async (req, res, next) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT 
+        cdr.request_id,
+        cdr.company_id,
+        c.name as company_name,
+        c.logo_url,
+        cdr.reason,
+        cdr.status,
+        cdr.created_at,
+        cdr.processed_at,
+        cdr.updated_at,
+        requester.full_name as requested_by_name,
+        requester.email as requested_by_email,
+        approver.full_name as approver_name,
+        approver.email as approver_email
+       FROM company_deletion_requests cdr
+       LEFT JOIN companies c ON cdr.company_id = c.company_id
+       LEFT JOIN website_admins requester ON cdr.requested_by = requester.admin_id
+       LEFT JOIN website_admins approver ON cdr.approver_id = approver.admin_id
+       ORDER BY cdr.created_at DESC`,
+      []
+    );
+
+    res.status(200).json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    logger.error(`Error getting all deletion requests: ${error.message}`);
     next(error);
   }
 };

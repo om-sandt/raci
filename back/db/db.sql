@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS website_admins (
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
   phone TEXT,
+  can_create_admins BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -25,6 +26,19 @@ CREATE TABLE IF NOT EXISTS companies (
   pan_id TEXT,
   project_name TEXT,
   project_logo TEXT
+);
+
+-- Create company deletion requests table
+CREATE TABLE IF NOT EXISTS company_deletion_requests (
+  request_id SERIAL PRIMARY KEY,
+  company_id INT REFERENCES companies(company_id) ON DELETE CASCADE,
+  requested_by INT REFERENCES website_admins(admin_id) ON DELETE SET NULL,
+  approver_id INT REFERENCES website_admins(admin_id) ON DELETE SET NULL,
+  status TEXT CHECK (status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
+  reason TEXT,
+  processed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create users table
@@ -46,6 +60,7 @@ CREATE TABLE IF NOT EXISTS users (
   otp TEXT,
   photo TEXT,
   location TEXT
+  -- event_approval_assign BOOLEAN DEFAULT FALSE
 );
 
 -- Create departments table
@@ -117,7 +132,8 @@ CREATE TABLE IF NOT EXISTS raci_assignments (
   financial_limit_min NUMERIC,
   financial_limit_max NUMERIC,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  level INT
 );
 
 -- Create RACI approval table
@@ -156,6 +172,24 @@ CREATE TABLE IF NOT EXISTS event_trackers (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create designations reference table
+CREATE TABLE IF NOT EXISTS designations (
+  designation_id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  company_id INT 
+);
+
+-- Create locations reference table
+CREATE TABLE IF NOT EXISTS locations (
+  location_id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  company_id INT 
+);
+
 -- Creating indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);
 CREATE INDEX IF NOT EXISTS idx_users_department_id ON users(department_id);
@@ -166,4 +200,8 @@ CREATE INDEX IF NOT EXISTS idx_raci_assignments_task_id ON raci_assignments(task
 CREATE INDEX IF NOT EXISTS idx_raci_assignments_user_id ON raci_assignments(user_id);
 CREATE INDEX IF NOT EXISTS idx_event_trackers_event_id ON event_trackers(event_id);
 CREATE INDEX IF NOT EXISTS idx_event_trackers_user_id ON event_trackers(user_id);
+CREATE INDEX IF NOT EXISTS idx_designations_name ON designations(name);
+CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(name);
+CREATE INDEX IF NOT EXISTS idx_company_deletion_requests_approver ON company_deletion_requests(approver_id);
+CREATE INDEX IF NOT EXISTS idx_company_deletion_requests_status ON company_deletion_requests(status);
   

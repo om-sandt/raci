@@ -49,12 +49,15 @@ mountRouter('/api/companies', require('./routes/companies'));
 mountRouter('/api/companies/:companyId/departments', require('./routes/departments').companyDepartmentsRouter);
 mountRouter('/api/departments', require('./routes/departments').departmentRouter);
 mountRouter('/api/events', require('./routes/events'));
-mountRouter('/api/raci-matrices', require('./routes/raci'));
+mountRouter('/api/raci', require('./routes/raci'));
 mountRouter('/api/meetings', require('./routes/meetings'));
 mountRouter('/api/dashboard', require('./routes/dashboard'));
 mountRouter('/api/website-admins', require('./routes/websiteAdmins'));
 mountRouter('/api/user-raci', require('./routes/userRaci'));
 mountRouter('/api/hod', require('./routes/hod'));
+mountRouter('/api/designations', require('./routes/designations'));
+mountRouter('/api/locations', require('./routes/locations'));
+mountRouter('/api/raci-tracker', require('./routes/raciTracker'));
 
 // Basic route with CORS
 app.get('/', (req, res) => {
