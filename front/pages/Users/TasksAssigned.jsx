@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import env from '../../src/config/env';
 
 const TasksAssigned = ({ financialLimits }) => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -432,11 +434,15 @@ const TasksAssigned = ({ financialLimits }) => {
     );
   };
 
+  const handleBackToDashboard = () => {
+    navigate('/user/raci-dashboard');
+  };
+
   return (
-    <div>
-      <div className="page-header">
-        <h1>Tasks Assigned to Me</h1>
-        <p>View and manage your assigned tasks</p>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
+      <div className="page-header" style={{ position: 'relative', marginBottom: '2rem' }}>
+        <h1 style={{ textAlign: 'center', margin: 0 }}>Tasks Assigned to Me</h1>
+        <p style={{ textAlign: 'center', margin: '0.5rem 0 0 0' }}>View and manage your assigned tasks</p>
       </div>
       
       {loading ? (
@@ -502,7 +508,6 @@ const TasksAssigned = ({ financialLimits }) => {
                   <th style={{ verticalAlign: 'middle', textAlign: 'center', padding: '0.75rem 1rem' }}>Priority</th>
                   <th style={{ verticalAlign: 'middle', textAlign: 'center', padding: '0.75rem 1rem' }}>Due Date</th>
                   <th style={{ verticalAlign: 'middle', textAlign: 'center', padding: '0.75rem 1rem' }}>Financial Limit</th>
-                  <th style={{ verticalAlign: 'middle', textAlign: 'center', padding: '0.75rem 1rem' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -549,36 +554,8 @@ const TasksAssigned = ({ financialLimits }) => {
                         justifyContent: 'center', // Align buttons consistently
                         alignItems: 'center'
                       }}>
-                        <button 
-                          className="btn btn-secondary"
-                          style={{ 
-                            padding: '0.5rem 1rem', 
-                            fontSize: '0.875rem', 
-                            whiteSpace: 'nowrap',
-                            width: '100%',
-                            maxWidth: '120px'
-                          }}
-                        >
-                          Details
-                        </button>
-                        {task.status !== 'completed' && (
-                          <button 
-                            className="btn btn-primary"
-                            style={{ 
-                              padding: '0.5rem 1rem', 
-                              fontSize: '0.875rem', 
-                              whiteSpace: 'nowrap',
-                              width: '100%',
-                              maxWidth: '120px'
-                            }}
-                            onClick={() => {
-                              // Handle marking as complete - would call API in real implementation
-                              alert(`Task "${task.title}" would be marked as complete`);
-                            }}
-                          >
-                            Complete
-                          </button>
-                        )}
+                        {/* Details button removed - view only */}
+                        {/* Complete button removed - view only */}
                       </div>
                     </td>
                   </tr>

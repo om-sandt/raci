@@ -8,6 +8,8 @@ import env from '../../src/config/env';
 const EditDepartment = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  console.log('EditDepartment: Component mounted with ID:', id);
   const [formData, setFormData] = useState({
     name: '',
     hodId: ''
@@ -16,6 +18,7 @@ const EditDepartment = () => {
   const [users, setUsers] = useState([]);
   const [companyId, setCompanyId] = useState(null);
   const [companyData, setCompanyData] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,6 +29,8 @@ const EditDepartment = () => {
   const [expandedSections, setExpandedSections] = useState({
     users: false,
     departments: true, // Auto-expand the departments section
+    designations: false,
+    locations: false,
     raci: false
   });
   
@@ -48,14 +53,18 @@ const EditDepartment = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        console.log('EditDepartment: Starting to fetch data for department ID:', id);
         setLoading(true);
         
         // Get current user's company
         const userData = await authService.getCurrentUser();
+        setCurrentUser(userData);
+        console.log('EditDepartment: User data loaded:', userData);
         
         if (userData && userData.company && userData.company.id) {
           const company = userData.company.id;
           setCompanyId(company);
+          console.log('EditDepartment: Company ID set:', company);
           
           // Get company data for the header/sidebar
           try {
@@ -71,16 +80,31 @@ const EditDepartment = () => {
           
           // Fetch department data
           try {
-            const departmentResponse = await apiService.get(`/departments/${id}`);
+            console.log('EditDepartment: Fetching department data for ID:', id);
+            const token = localStorage.getItem('raci_auth_token');
+            const departmentResponse = await fetch(`${env.apiBaseUrl}/departments/${id}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+              }
+            });
             
-            if (departmentResponse) {
+            console.log('EditDepartment: Department response status:', departmentResponse.status);
+            
+            if (departmentResponse.ok) {
+              const departmentData = await departmentResponse.json();
+              console.log('EditDepartment: Department data received:', departmentData);
               setFormData({
-                name: departmentResponse.name || '',
-                hodId: departmentResponse.hod?.id || ''
+                name: departmentData.name || '',
+                hodId: departmentData.hod?.id || ''
               });
+            } else {
+              const errorText = await departmentResponse.text();
+              console.error('EditDepartment: Department fetch failed:', departmentResponse.status, errorText);
+              throw new Error(`Failed to fetch department: ${departmentResponse.status}`);
             }
           } catch (error) {
-            console.error('Failed to fetch department:', error);
+            console.error('EditDepartment: Failed to fetch department:', error);
             setError('Failed to load department information.');
           }
           
@@ -181,9 +205,16 @@ const EditDepartment = () => {
   };
   
   const renderCompanyLogo = () => {
-    const rawLogo = companyData && (companyData.logoUrl || companyData.logo);
+    if (!companyData) return null;
+    
+    const rawLogo = companyData.logoUrl || companyData.logo;
     if (rawLogo) {
-      const logoSrc = rawLogo.startsWith('http') ? rawLogo : `${window.location.protocol}//${window.location.hostname}:5000${rawLogo}`;
+      const logoUrl = rawLogo.startsWith('http')
+        ? rawLogo
+        : `${env.apiHost}${rawLogo}`;
+      
+      console.log("Using logo URL:", logoUrl);
+      
       return (
         <div style={{ 
           width: '40px', 
@@ -191,60 +222,79 @@ const EditDepartment = () => {
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          marginRight: '12px',
+          marginRight: '10px',
           flexShrink: 0,
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '6px',
-          padding: '6px',
-          margin: '0 10px'
+          border: '1px solid #f3f4f6',
+          borderRadius: '4px',
+          overflow: 'hidden',
+          background: '#fff'
         }}>
           <img 
-            src={logoSrc}
+            src={logoUrl}
             alt={companyData?.name || 'Company'} 
+            className="company-logo"
             style={{ 
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              filter: 'brightness(0) invert(1)'
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
+              console.log("Logo failed to load, using fallback");
+              // Replace with first letter of company name inside a colored circle
+              const parent = e.target.parentNode;
+              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
             }}
           />
         </div>
       );
-    } else {
+    }
+    
+    // Fallback to letter display
+    return (
+      <div style={{ 
+        width: '40px', 
+        height: '40px', 
+        borderRadius: '50%', 
+        backgroundColor: '#4f46e5', 
+        color: 'white', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        fontWeight: 'bold', 
+        fontSize: '18px',
+        marginRight: '10px',
+        flexShrink: 0
+      }}>
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
+      </div>
+    );
+  };
+
+  // Render current user profile photo (used top-right)
+  const renderUserPhoto = () => {
+    if (!currentUser) return null;
+    const photoUrl = currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto;
+    if (photoUrl) {
+      const finalUrl = photoUrl.startsWith('http') ? photoUrl : `${env.apiHost}${photoUrl}`;
       return (
-        <div style={{ 
-          width: '40px', 
-          height: '40px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          marginRight: '12px',
-          flexShrink: 0,
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '6px',
-          padding: '6px',
-          margin: '0 10px'
-        }}>
-          <div style={{ 
-            width: '100%',
-            height: '100%',
-            borderRadius: '50%',
-            backgroundColor: '#4f46e5',
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 'bold',
-            fontSize: '14px'
-          }}>
-            {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
-          </div>
-        </div>
+        <img
+          src={finalUrl}
+          alt={currentUser?.name || 'User'}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+          onError={(e) => {
+            const parent = e.target.parentNode;
+            parent.innerHTML = `<div style=\"width: 100%; height: 100%; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;\">${currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}</div>`;
+          }}
+        />
       );
     }
+    return currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U';
   };
   
+  console.log('EditDepartment: Rendering component, loading:', loading, 'error:', error, 'formData:', formData);
+  
   if (loading) {
+    console.log('EditDepartment: Showing loading state');
     return (
       <div className="loading-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
         <div className="spinner" style={{ width: '40px', height: '40px', borderRadius: '50%', border: '3px solid #f3f3f3', borderTop: '3px solid #4f46e5', animation: 'spin 1s linear infinite' }}></div>
@@ -254,160 +304,81 @@ const EditDepartment = () => {
   }
 
   return (
-    <div className="dashboard-layout fix-layout">
-      <aside className="sidebar">
-        <div className="brand" style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          padding: '15px 12px',
-          height: '64px',
-          borderBottom: '1px solid rgba(0,0,0,0.05)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+    <div className="dashboard-layout-new">
+      <header className="dashboard-header-new">
+        <div className="header-left">
+          <div className="company-info">
+            <button 
+              onClick={() => navigate('/company-admin/dashboard')}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
             {renderCompanyLogo()}
-            <span style={{ 
-              fontWeight: '600', 
-              fontSize: '16px',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              color: 'white',
-              letterSpacing: '0.5px'
-            }}>
-              {companyData ? companyData.name : 'Company'}
-            </span>
-          </div>
-        </div>
-        
-        <nav>
-          <NavLink to="/company-admin/dashboard" className="nav-item">
-            <i className="icon">📊</i> Dashboard
-          </NavLink>
-          
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('users')}
-          >
-            <i className="icon">👥</i> 
-            <span>User Administration</span>
-            <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-            <NavLink to="/company-admin/user-creation" className="nav-item">
-              Create User
-            </NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">
-              Update User
-            </NavLink>
-          </div>
-          
-          <div 
-            className={`nav-item active`}
-            onClick={() => toggleSection('departments')}
-          >
-            <i className="icon">🏢</i> 
-            <span>Department Workspace</span>
-            <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-            <NavLink to="/company-admin/department-creation" className="nav-item">
-              Create Department
-            </NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">
-              Department Workspace
-            </NavLink>
-          </div>
-          
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('raci')}
-          >
-            <i className="icon">📅</i> 
-            <span>RACI Operations</span>
-            <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-            <NavLink to="/company-admin/event-master" className="nav-item">
-              Event Master
-            </NavLink>
-            <NavLink to="/company-admin/event-list" className="nav-item">
-              Event List
-            </NavLink>
-            <NavLink to="/company-admin/raci-assignment" className="nav-item">
-              RACI Assignment
-            </NavLink>
-            <NavLink to="/company-admin/raci-tracker" className="nav-item">
-              RACI Tracker
-            </NavLink>
-          </div>
-          
-          <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-            <i className="icon">📆</i> Meeting Calendar
-          </NavLink>
-          
-          <NavLink to="/company-admin/settings" className="nav-item">
-            <i className="icon">⚙️</i> Company Settings
-          </NavLink>
-          
-          <button className="nav-item" onClick={handleLogout} style={{
-            width: '100%',
-            textAlign: 'left',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginLeft: '0.5rem',
-            height: '44px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}>
-            <i className="icon">🚪</i> Logout
-          </button>
-        </nav>
-      </aside>
-      
-      <main className="dashboard-content fix-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">
-            {companyData ? companyData.name : 'Company'} Administration
-          </div>
-          <div className="header-actions">
-            <div className="user-info">
-              <div className="user-avatar">
-                {/* Replace with company logo */}
-                {companyData && companyData.logoUrl ? (
-                  <img 
-                    src={companyData.logoUrl.startsWith('http') ? 
-                      companyData.logoUrl : 
-                      `${window.location.protocol}//${window.location.hostname}:5000${companyData.logoUrl}`}
-                    alt={companyData?.name || 'Company'} 
-                    style={{ 
-                      maxWidth: '100%',
-                      maxHeight: '100%',
-                      objectFit: 'contain'
-                    }}
-                    onError={(e) => {
-                      // Replace with first letter of company name inside a colored circle
-                      const parent = e.target.parentNode;
-                      parent.innerHTML = `<div style="width: 100%; height: 100%; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
-                    }}
-                  />
-                ) : (
-                  companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'
-                )}
-              </div>
-              <div className="user-details">
-                <div className="user-name">Administrator</div>
-                <div className="user-role">Company Admin</div>
-              </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? companyData.name : 'Company'} Administration
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Edit Department
+              </p>
             </div>
           </div>
-        </header>
-        
-        <div className="content-wrapper fix-wrapper">
+        </div>
+        <div className="header-right">
+          <div className="user-info">
+            <div className="user-avatar">
+              {renderUserPhoto()}
+            </div>
+            <div className="user-details">
+              <div className="user-name">Administrator</div>
+              <div className="user-role">Company Admin</div>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+      
+      <main className="dashboard-content-new">
+        <div style={{ padding: '2rem', margin: '0 2rem' }}>
           <div className="page-header">
             <h1>Edit Department</h1>
           </div>
@@ -438,18 +409,36 @@ const EditDepartment = () => {
           )}
           
           {/* Department edit form */}
-          <div className="card fix-card">
+          <div className="card" style={{
+            background: 'white',
+            borderRadius: '12px',
+            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
+            padding: '1.5rem',
+            marginBottom: '1.5rem',
+            width: '100%',
+            boxSizing: 'border-box',
+            display: 'block'
+          }}>
             <div className="card-header" style={{ 
               borderBottom: '1px solid #e5e7eb',
               paddingBottom: '1rem',
               marginBottom: '1.5rem'
             }}>
               <h2>Department Information</h2>
+              <p style={{ color: '#6b7280', marginTop: '0.5rem', marginBottom: '0' }}>
+                Update the department details below
+              </p>
             </div>
             
-            <form onSubmit={handleSubmit} className="form-grid fix-form">
-              <div className="form-group">
-                <label htmlFor="name">Department Name *</label>
+            <form onSubmit={handleSubmit} style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr',
+              gap: '1.5rem',
+              width: '100%',
+              boxSizing: 'border-box'
+            }}>
+              <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
+                <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Department Name *</label>
                 <input
                   type="text"
                   id="name"
@@ -463,13 +452,15 @@ const EditDepartment = () => {
                     padding: '0.75rem 1rem',
                     border: '1px solid #d1d5db',
                     borderRadius: '8px',
-                    fontSize: '1rem'
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                    display: 'block'
                   }}
                 />
               </div>
               
-              <div className="form-group">
-                <label htmlFor="hodId">Head of Department (Optional)</label>
+              <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
+                <label htmlFor="hodId" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Head of Department (Optional)</label>
                 <select
                   id="hodId"
                   name="hodId"
@@ -481,7 +472,9 @@ const EditDepartment = () => {
                     padding: '0.75rem 1rem',
                     border: '1px solid #d1d5db',
                     borderRadius: '8px',
-                    fontSize: '1rem'
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                    display: 'block'
                   }}
                 >
                   <option value="">No Head of Department</option>
@@ -491,7 +484,15 @@ const EditDepartment = () => {
                     </option>
                   ))}
                 </select>
-                {loadingUsers && <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>Loading users...</span>}
+                {loadingUsers && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
+                    Loading users...
+                  </div>
+                )}
+                <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
+                  You can assign a Head of Department now or later.
+                </p>
               </div>
               
               <div className="form-actions" style={{ 
@@ -501,7 +502,7 @@ const EditDepartment = () => {
                 gap: '12px',
                 borderTop: '1px solid #e5e7eb',
                 paddingTop: '1.25rem',
-                gridColumn: '1 / -1'
+                width: '100%'
               }}>
                 <button 
                   type="button" 
@@ -536,59 +537,91 @@ const EditDepartment = () => {
             </form>
           </div>
         </div>
-        
-        <style jsx="true" global="true">{`
-          .fix-layout {
-            display: flex;
-            width: 100%;
-            height: 100vh;
-            overflow: hidden;
-          }
-          
-          .fix-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-            padding: 0 !important;
-          }
-          
-          .fix-wrapper {
-            padding: 1.5rem !important;
-            margin: 0 !important;
-            max-width: 100% !important;
-            box-sizing: border-box !important;
-          }
-          
-          .fix-card {
-            margin: 0 0 1.5rem 0 !important;
-            padding: 1.5rem !important;
-            width: 100% !important;
-            box-sizing: border-box !important;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-          }
-          
-          .fix-form {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-            width: 100% !important;
-          }
-          
-          @media (max-width: 768px) {
-            .fix-form {
-              grid-template-columns: 1fr;
-            }
-          }
-          
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
       </main>
+
+      <style jsx="true">{`
+        .dashboard-layout-new {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .dashboard-header-new {
+          background: white;
+          border-bottom: 1px solid #e5e7eb;
+          padding: 1rem 2rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
+        
+        .header-left {
+          display: flex;
+          align-items: center;
+        }
+        
+        .company-info {
+          display: flex;
+          align-items: center;
+        }
+        
+        .header-right {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        
+        .user-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: #e0e7ff;
+          color: #4f46e5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+          font-size: 1rem;
+          overflow: hidden;
+        }
+        
+        .user-details {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .user-name {
+          font-weight: 600;
+          font-size: 0.9rem;
+          color: #111827;
+        }
+        
+        .user-role {
+          font-size: 0.8rem;
+          color: #6b7280;
+        }
+        
+        .dashboard-content-new {
+          flex: 1;
+          overflow-y: auto;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

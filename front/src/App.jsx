@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Home from '../pages/Home';
+import LearnRACI from '../pages/LearnRACI';
 import WebsiteAdminDashboard from '../pages/WebsiteAdmin/Dashboard';
 import CompanyAdminDashboard from '../pages/CompanyAdmin/Dashboard';
 import UserDashboard from '../pages/Users/Dashboard';
@@ -11,6 +12,7 @@ import CreatePassword from '../pages/Auth/CreatePassword';
 import ForgotPassword from '../pages/Auth/ForgotPassword';
 import ChangePassword from '../pages/Auth/ChangePassword';
 import CreateDepartment from '../pages/CompanyAdmin/CreateDepartment';
+import EditDepartment from '../pages/CompanyAdmin/EditDepartment';
 import UserManagement from '../pages/CompanyAdmin/UserManagement';
 import CreateUser from '../pages/CompanyAdmin/CreateUser';
 import EditUser from '../pages/CompanyAdmin/EditUser';
@@ -36,6 +38,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/learn-raci" element={<LearnRACI />} />
         <Route path="/website-admin/*" element={
           <PrivateRoute element={<WebsiteAdminDashboard />} />
         } />
@@ -78,6 +81,7 @@ function App() {
         <Route path="/company-admin/users/edit/:id" element={<PrivateRoute element={<EditUser />} />} />
         <Route path="/company-admin/departments" element={<PrivateRoute element={<DepartmentManagement />} />} />
         <Route path="/company-admin/departments/create" element={<PrivateRoute element={<CreateDepartment />} />} />
+        <Route path="/company-admin/departments/edit/:id" element={<PrivateRoute element={<EditDepartment />} />} />
         <Route path="/company-admin/department-management" element={<DepartmentManagement />} />
         <Route path="/company-admin/department-creation" element={<CreateDepartment />} />
         {/* Dashboard (overview) */}

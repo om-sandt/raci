@@ -26,6 +26,15 @@ const UserCreation = () => (
         <input type="text" name="employeeId" />
       </label>
       <label>
+        Division
+        <select name="division">
+          <option value="">Select Division</option>
+          <option value="Plates & Chemicals (P&C)">Plates & Chemicals (P&C)</option>
+          <option value="Digital Print Media (DPM)">Digital Print Media (DPM)</option>
+          <option value="Trading">Trading</option>
+        </select>
+      </label>
+      <label>
         Role
         <select name="role">
           <option value="hod">HOD</option>

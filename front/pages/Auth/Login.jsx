@@ -51,15 +51,19 @@ const Login = () => {
         // Direct redirection with window.location instead of navigate()
         if (role === 'website_admin' || role.includes('website')) {
           console.log('Redirecting to website admin dashboard');
-          window.location.href = '/website-admin';
+          window.location.href = '/website-admin/dashboard';
         } 
         else if (role === 'company_admin' || role.includes('company')) {
           console.log('Redirecting to company admin dashboard');
-          window.location.href = '/company-admin';
+          window.location.href = '/company-admin/dashboard';
+        }
+        else if (role === 'hod' || role.includes('head')) {
+          console.log('Redirecting to user dashboard (HOD)');
+          window.location.href = '/user/raci-dashboard';
         }
         else {
           console.log('Redirecting to user dashboard');
-          window.location.href = '/user';
+          window.location.href = '/user/raci-dashboard';
         }
       } else {
         console.error('Invalid response structure:', response);

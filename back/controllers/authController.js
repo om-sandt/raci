@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const { generateToken, generateRefreshToken } = require('../utils/jwtUtils');
 const { generateOTP, verifyOTP } = require('../utils/otpUtils');
+const { generateS3Url } = require('../utils/s3Utils');
 const logger = require('../utils/logger');
 
 // @desc    Login user
@@ -181,7 +182,7 @@ exports.getMe = async (req, res, next) => {
       designation: user.designation,
       phone: user.phone,
       employeeId: user.employee_id,
-      photo: user.photo
+      photo: generateS3Url(user.photo)
     });
   } catch (error) {
     next(error);

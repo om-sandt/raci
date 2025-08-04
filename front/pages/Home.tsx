@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import '../styles/home.scss';
+
+gsap.registerPlugin(ScrollTrigger);
 
 // MatrixIcon component to visually represent a 2×2 RACI matrix
 const matrixCellStyle: React.CSSProperties = {
@@ -59,17 +63,61 @@ const Home = () => {
   const [activeTab, setActiveTab] = useState('home');
   const navigate = useNavigate();
 
+  useEffect(() => {
+    // GSAP Hero Animation
+    gsap.fromTo('.home-title', 
+      { opacity: 0, y: 50 },
+      { opacity: 1, y: 0, duration: 1, delay: 0.2 }
+    );
+
+    gsap.fromTo('.home-subtitle', 
+      { opacity: 0, y: 30 },
+      { opacity: 1, y: 0, duration: 1, delay: 0.4 }
+    );
+
+    gsap.fromTo('.cta-button', 
+      { opacity: 0, y: 30 },
+      { opacity: 1, y: 0, duration: 1, delay: 0.6 }
+    );
+
+    // GSAP Feature Cards Animation
+    const featureCards = gsap.utils.toArray('.feature-card');
+    gsap.fromTo(featureCards,
+      { opacity: 0, y: 50 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        stagger: 0.2,
+        ease: "power2.out",
+        scrollTrigger: {
+          trigger: ".feature-section",
+          start: "top 80%",
+          end: "bottom 20%",
+          toggleActions: "play none none reverse"
+        }
+      }
+    );
+
+    return () => {
+      ScrollTrigger.getAll().forEach(trigger => trigger.kill());
+    };
+  }, []);
+
   return (
     <div className="home-container">
       {/* Combined navigation bar */}
       <div className="home-nav">
         <div className="container">
           <div className="nav-left">
-            <div className="brand-logo">🔄</div>
-            <div className="brand-name">Sharp RACI</div>
+            <div className="brand-logo">
+              <img src="/snt.png" alt="NIYANTAR Logo" />
+            </div>
+            <div className="brand-name">NIYANTAR</div>
           </div>
           
-          <div className="nav-center">
+          {/* Commented out Features and About sections for future use */}
+          {/* <div className="nav-center">
             <div 
               className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
               onClick={() => setActiveTab('home')}
@@ -88,9 +136,12 @@ const Home = () => {
             >
               About
             </div>
-          </div>
+          </div> */}
           
           <div className="nav-right">
+            <Link to="/learn-raci" className="learn-raci-button">
+              Learn RACI
+            </Link>
             <Link to="/auth/login" className="login-button">
               Login
             </Link>
@@ -102,9 +153,9 @@ const Home = () => {
         <div className="tab-content">
           <section className="hero-section">
             <div className="home-content">
-              <h1 className="home-title">Welcome to Sharp RACI Platform</h1>
+              <h1 className="home-title">Welcome to NIYANTAR</h1>
               <p className="home-subtitle">
-                Enhance organizational efficiency with our comprehensive RACI (Responsible, Accountable, Consulted, Informed) matrix solution
+                Confusion to Clarity - SOD / RACI Matrix tool
               </p>
               <Link to="/auth/login">
                 <button
@@ -143,26 +194,12 @@ const Home = () => {
               <div className="feature-card">
                 <MatrixIcon />
                 <div className="feature-content">
-                  <h3>RACI Matrix</h3>
-                  <p>Create and manage RACI matrices for all your projects. Assign roles and responsibilities with ease.</p>
+                  <h3>RACI/DOA</h3>
+                  <p>Create and raci/doa for all your projects. Assign roles and responsibilities with ease.</p>
                 </div>
               </div>
               
-              <div className="feature-card">
-                <div className="feature-icon">👥</div>
-                <div className="feature-content">
-                  <h3>Team Management</h3>
-                  <p>Manage your teams, departments and organizational structure all in one place.</p>
-                </div>
-              </div>
-              
-              <div className="feature-card">
-                <div className="feature-icon">📊</div>
-                <div className="feature-content">
-                  <h3>Visual Dashboards</h3>
-                  <p>Get insights with beautiful visual dashboards that help you track progress and responsibilities.</p>
-                </div>
-              </div>
+
             </div>
           </section>
           
@@ -175,7 +212,8 @@ const Home = () => {
         </div>
       )}
       
-      {activeTab === 'features' && (
+      {/* Commented out Features section for future use */}
+      {/* {activeTab === 'features' && (
         <div className="tab-content">
           <div style={{ padding: '4rem 2rem', backgroundColor: '#f8fafc' }}>
             <div className="home-content">
@@ -197,7 +235,7 @@ const Home = () => {
                 fontSize: '1.2rem', 
                 lineHeight: '1.6' 
               }}>
-                Discover how Sharp RACI streamlines responsibility assignment and enhances team collaboration
+                Discover how NIYANTAR streamlines responsibility assignment and enhances team collaboration
               </p>
               
               <div style={{ 
@@ -227,320 +265,38 @@ const Home = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
                     <MatrixIcon />
                     <h3 style={{ 
-                      fontSize: '1.8rem', 
-                      margin: 0, 
+                      fontSize: '1.5rem', 
                       color: '#1e293b',
-                      fontWeight: '600' 
-                    }}>
-                      RACI Matrix Management
-                    </h3>
+                      fontWeight: '600',
+                      margin: 0
+                    }}>RACI Matrix Management</h3>
                   </div>
                   <p style={{ 
-                    fontSize: '1.1rem', 
+                    color: '#64748b', 
                     lineHeight: '1.6', 
-                    color: '#475569',
-                    marginBottom: '1rem'
+                    marginBottom: '1.5rem'
                   }}>
-                    Create detailed RACI matrices for your projects, assigning team members to each role:
+                    Create, edit, and manage RACI matrices with our intuitive interface. Assign roles and responsibilities with drag-and-drop functionality.
                   </p>
-                  <ul style={{
-                    listStyleType: 'none',
-                    padding: '0',
-                    marginBottom: '1rem'
-                  }}>
-                    <li style={{
-                      padding: '0.5rem 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      borderBottom: '1px solid #f1f5f9'
-                    }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        backgroundColor: '#4f46e5',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        fontSize: '14px'
-                      }}>R</span>
-                      <span>R – Performs the task</span>
-                    </li>
-                    <li style={{
-                      padding: '0.5rem 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      borderBottom: '1px solid #f1f5f9'
-                    }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        backgroundColor: '#0891b2',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        fontSize: '14px'
-                      }}>A</span>
-                      <span>A – Ultimately accountable for the work</span>
-                    </li>
-                    <li style={{
-                      padding: '0.5rem 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      borderBottom: '1px solid #f1f5f9'
-                    }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        backgroundColor: '#ca8a04',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        fontSize: '14px'
-                      }}>C</span>
-                      <span>C – Provides input</span>
-                    </li>
-                    <li style={{
-                      padding: '0.5rem 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem'
-                    }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        backgroundColor: '#ea580c',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        fontSize: '14px'
-                      }}>I</span>
-                      <span>I – Receives updates</span>
-                    </li>
-                  </ul>
-                </div>
-                
-                <div style={{ 
-                  backgroundColor: 'white',
-                  borderRadius: '16px',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                  padding: '2rem',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    top: '0',
-                    left: '0',
-                    width: '8px',
-                    height: '100%',
-                    backgroundColor: '#0891b2'
-                  }}></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                    <div style={{
-                      width: '60px',
-                      height: '60px',
-                      borderRadius: '12px',
-                      backgroundColor: '#e0f2fe',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '28px'
-                    }}>👥</div>
-                    <h3 style={{ 
-                      fontSize: '1.8rem', 
-                      margin: 0, 
-                      color: '#1e293b',
-                      fontWeight: '600'
-                    }}>
-                      Organization Management
-                    </h3>
-                  </div>
-                  <p style={{ 
-                    fontSize: '1.1rem', 
-                    lineHeight: '1.6', 
-                    color: '#475569' 
-                  }}>
-                    Create a comprehensive structure of your organization with:
-                  </p>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '1rem',
-                    margin: '1.5rem 0'
-                  }}>
-                    <div style={{
-                      backgroundColor: '#f8fafc',
-                      padding: '1.25rem',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{fontSize: '24px', marginBottom: '0.5rem'}}>🏢</div>
-                      <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a'}}>Departments</h4>
-                      <p style={{margin: 0, fontSize: '0.9rem', color: '#64748b'}}>Create and manage departmental units</p>
-                    </div>
-                    <div style={{
-                      backgroundColor: '#f8fafc',
-                      padding: '1.25rem',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{fontSize: '24px', marginBottom: '0.5rem'}}>👤</div>
-                      <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a'}}>Users</h4>
-                      <p style={{margin: 0, fontSize: '0.9rem', color: '#64748b'}}>Manage team members and roles</p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div style={{ 
-                  backgroundColor: 'white',
-                  borderRadius: '16px',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                  padding: '2rem',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    top: '0',
-                    left: '0',
-                    width: '8px',
-                    height: '100%',
-                    backgroundColor: '#ca8a04'
-                  }}></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                    <div style={{
-                      width: '60px',
-                      height: '60px',
-                      borderRadius: '12px',
-                      backgroundColor: '#fef9c3',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '28px'
-                    }}>📅</div>
-                    <h3 style={{ 
-                      fontSize: '1.8rem', 
-                      margin: 0, 
-                      color: '#1e293b',
-                      fontWeight: '600'
-                    }}>
-                      Event & Task Management
-                    </h3>
-                  </div>
-                  <p style={{ 
-                    fontSize: '1.1rem', 
-                    lineHeight: '1.6', 
-                    color: '#475569' 
-                  }}>
-                    Create events, manage tasks, and track progress with our user-friendly interfaces:
-                  </p>
-                  <ul style={{
-                    padding: '0.5rem 0 0.5rem 1rem',
-                    listStylePosition: 'inside',
-                    color: '#475569',
-                    fontSize: '1.05rem',
-                    lineHeight: '1.7'
-                  }}>
-                    <li>Define events and associated tasks</li>
-                    <li>Set deadlines and priorities</li>
-                    <li>Track completion status in real-time</li>
-                    <li>Receive notifications on critical updates</li>
-                    <li>Generate progress reports automatically</li>
-                  </ul>
-                </div>
-                
-                <div style={{ 
-                  backgroundColor: 'white',
-                  borderRadius: '16px',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                  padding: '2rem',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    position: 'absolute',
-                    top: '0',
-                    left: '0',
-                    width: '8px',
-                    height: '100%',
-                    backgroundColor: '#7c3aed'
-                  }}></div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                    <div style={{
-                      width: '60px',
-                      height: '60px',
-                      borderRadius: '12px',
-                      backgroundColor: '#f3e8ff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '28px'
-                    }}>📊</div>
-                    <h3 style={{ 
-                      fontSize: '1.8rem', 
-                      margin: 0, 
-                      color: '#1e293b',
-                      fontWeight: '600'
-                    }}>
-                      Custom Dashboards & Analytics
-                    </h3>
-                  </div>
-                  <p style={{ 
-                    fontSize: '1.1rem', 
-                    lineHeight: '1.6', 
-                    color: '#475569',
-                    marginBottom: '1rem'
-                  }}>
-                    Get insights with role-specific dashboards and powerful analytics:
-                  </p>
-                  <div style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    flexWrap: 'wrap',
-                    marginTop: '1rem'
-                  }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <span style={{
                       display: 'inline-block',
                       padding: '0.5rem 1rem',
-                      backgroundColor: '#f3e8ff',
-                      color: '#7c3aed',
+                      backgroundColor: '#fef3c7',
+                      color: '#d97706',
                       borderRadius: '1.5rem',
                       fontSize: '0.95rem',
                       fontWeight: '500'
-                    }}>Performance Tracking</span>
+                    }}>Drag & Drop</span>
                     <span style={{
                       display: 'inline-block',
                       padding: '0.5rem 1rem',
-                      backgroundColor: '#e0f2fe',
-                      color: '#0891b2',
+                      backgroundColor: '#dbeafe',
+                      color: '#2563eb',
                       borderRadius: '1.5rem',
                       fontSize: '0.95rem',
                       fontWeight: '500'
-                    }}>Resource Allocation</span>
+                    }}>Real-time Updates</span>
                     <span style={{
                       display: 'inline-block',
                       padding: '0.5rem 1rem',
@@ -549,34 +305,17 @@ const Home = () => {
                       borderRadius: '1.5rem',
                       fontSize: '0.95rem',
                       fontWeight: '500'
-                    }}>Progress Reports</span>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '0.5rem 1rem',
-                      backgroundColor: '#ffedd5',
-                      color: '#ea580c',
-                      borderRadius: '1.5rem',
-                      fontSize: '0.95rem',
-                      fontWeight: '500'
-                    }}>Task Dependencies</span>
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '0.5rem 1rem',
-                      backgroundColor: '#fee2e2',
-                      color: '#b91c1c',
-                      borderRadius: '1.5rem',
-                      fontSize: '0.95rem',
-                      fontWeight: '500'
-                    }}>Bottleneck Detection</span>
+                    }}>Role Templates</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      )}
+      )} */}
       
-      {activeTab === 'about' && (
+      {/* Commented out About section for future use */}
+      {/* {activeTab === 'about' && (
         <div className="tab-content">
           <div style={{ 
             padding: '4rem 2rem',
@@ -590,7 +329,7 @@ const Home = () => {
                 marginBottom: '1.5rem',
                 fontWeight: '700'
               }}>
-                About Sharp RACI
+                About NIYANTAR
               </h2>
               
               <div style={{ 
@@ -619,7 +358,7 @@ const Home = () => {
                   top: '0',
                   left: '0',
                   width: '100%',
-                  height: '8px',
+                  height: '4px',
                   background: 'linear-gradient(to right, #4f46e5, #7c3aed)'
                 }}></div>
                 
@@ -630,7 +369,7 @@ const Home = () => {
                   textAlign: 'left'
                 }}>
                   <p style={{ marginBottom: '1.5rem' }}>
-                    Sharp RACI is a cutting-edge platform designed to help organizations of all sizes clearly define roles and responsibilities across projects and departments.
+                    NIYANTAR is a cutting-edge platform designed to help organizations of all sizes clearly define roles and responsibilities across projects and departments.
                   </p>
                   
                   <p style={{ marginBottom: '1.5rem' }}>
@@ -650,178 +389,22 @@ const Home = () => {
                       color: '#1e293b',
                       fontWeight: '600',
                       marginBottom: '1.25rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem'
+                      marginTop: 0
+                    }}>Our Mission</h3>
+                    <p style={{ 
+                      margin: 0,
+                      color: '#475569',
+                      fontSize: '1.1rem'
                     }}>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        backgroundColor: '#4f46e5',
-                        color: 'white',
-                        fontSize: '18px'
-                      }}>✓</span>
-Why Choose Sharp RACI?                    </h3>
-                    
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-                      gap: '1.25rem'
-                    }}>
-                      <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        alignItems: 'flex-start'
-                      }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '8px',
-                          backgroundColor: '#fef9c3',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '20px',
-                          flexShrink: 0
-                        }}>📅</div>
-                        <div>
-                          <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a', fontWeight: '600'}}>
-                            Event Tracking & Scheduling
-                          </h4>
-                          <p style={{margin: 0, color: '#475569', fontSize: '0.95rem'}}>
-                            Organize events, schedule meetings, and manage timelines—all in one place
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        alignItems: 'flex-start'
-                      }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '8px',
-                          backgroundColor: '#e0f2fe',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '20px',
-                          flexShrink: 0
-                        }}>⚖️</div>
-                        <div>
-                          <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a', fontWeight: '600'}}>
-                            Improved Accountability
-                          </h4>
-                          <p style={{margin: 0, color: '#475569', fontSize: '0.95rem'}}>
-                            Clearly define who is responsible for what in any project or process
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        alignItems: 'flex-start'
-                      }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '8px',
-                          backgroundColor: '#dcfce7',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '20px',
-                          flexShrink: 0
-                        }}>💬</div>
-                        <div>
-                          <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a', fontWeight: '600'}}>
-                            Streamlined Communication
-                          </h4>
-                          <p style={{margin: 0, color: '#475569', fontSize: '0.95rem'}}>
-                            Ensure the right people are consulted and informed at every step
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        alignItems: 'flex-start'
-                      }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '8px',
-                          backgroundColor: '#fef9c3',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '20px',
-                          flexShrink: 0
-                        }}>📊</div>
-                        <div>
-                          <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a', fontWeight: '600'}}>
-                            Better Resource Management
-                          </h4>
-                          <p style={{margin: 0, color: '#475569', fontSize: '0.95rem'}}>
-                            Optimize workload distribution and prevent resource conflicts
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        alignItems: 'flex-start'
-                      }}>
-                        <div style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '8px',
-                          backgroundColor: '#ffedd5',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '20px',
-                          flexShrink: 0
-                        }}>🔎</div>
-                        <div>
-                          <h4 style={{margin: '0 0 0.5rem 0', color: '#0f172a', fontWeight: '600'}}>
-                            Event Transparency
-                          </h4>
-                          <p style={{margin: 0, color: '#475569', fontSize: '0.95rem'}}>
-                            Offer clear insight into event status and updates for every stakeholder
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                      To empower organizations with clear role definitions, improved communication, and enhanced project success through innovative RACI matrix management.
+                    </p>
                   </div>
-                  
-                  <p style={{ 
-                    fontSize: '1.2rem',
-                    fontWeight: '500',
-                    color: '#1e293b',
-                    textAlign: 'center',
-                    marginTop: 0,
-                    padding: '1rem',
-                    borderTop: '1px solid #e2e8f0',
-                    borderBottom: '1px solid #e2e8f0'
-                  }}>
-                    Our mission is to help teams work more efficiently by providing the tools they need to define, track, and optimize responsibilities across their organization.
-                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Footer */}
       <footer

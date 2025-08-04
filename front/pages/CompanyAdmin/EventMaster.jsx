@@ -28,12 +28,24 @@ const EventMaster = () => {
     name: '',
     description: '',
     departmentId: '',
-    divisionId: '',
+    division: '',
     priority: '',
     eventType: '',
+    kpi: '',
     document: null,
     hod: '' // Added new HOD field
   });
+  
+  // Debug: Log initial form state
+  console.log('Initial form state:', eventForm);
+  
+  // Debug: Log form state changes
+  useEffect(() => {
+    console.log('Form state updated:', eventForm);
+    if (eventForm.kpi) {
+      console.log('KPI field is set to:', eventForm.kpi);
+    }
+  }, [eventForm]);
   
   // State for selected employees
   const [selectedEmployees, setSelectedEmployees] = useState([]);
@@ -398,10 +410,36 @@ const EventMaster = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
-    setEventForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    console.log('Form field changed:', name, value); // Debug log
+    console.log('Previous form state:', eventForm);
+    
+    // Special debug for KPI field
+    if (name === 'kpi') {
+      console.log('=== KPI FIELD CHANGE DEBUG ===');
+      console.log('KPI field name:', name);
+      console.log('KPI field value:', value);
+      console.log('KPI field value type:', typeof value);
+      console.log('KPI field value length:', value ? value.length : 0);
+      console.log('================================');
+    }
+    
+    setEventForm(prev => {
+      const newState = {
+        ...prev,
+        [name]: value
+      };
+      console.log('New form state:', newState);
+      
+      // Special debug for KPI field in new state
+      if (name === 'kpi') {
+        console.log('=== KPI FIELD IN NEW STATE ===');
+        console.log('New state KPI value:', newState.kpi);
+        console.log('New state KPI type:', typeof newState.kpi);
+        console.log('==============================');
+      }
+      
+      return newState;
+    });
     
     // If department changes, fetch employees for that department
     if (name === 'departmentId' && value) {
@@ -576,6 +614,15 @@ const EventMaster = () => {
             status: 'not_started'
           }];
 
+      // Debug: Log form values before creating eventData
+      console.log('=== DEBUG: Form Values Before Submission ===');
+      console.log('isEditMode:', isEditMode);
+      console.log('eventForm.kpi:', eventForm.kpi);
+      console.log('eventForm.kpi type:', typeof eventForm.kpi);
+      console.log('eventForm.kpi length:', eventForm.kpi ? eventForm.kpi.length : 0);
+      console.log('Full eventForm:', eventForm);
+      console.log('===========================================');
+
       // Build payload respecting new API (omit empty optional fields)
       const eventData = {
         name: eventForm.name,
@@ -583,6 +630,7 @@ const EventMaster = () => {
         departmentId: eventForm.departmentId,
         priority: eventForm.priority || '',
         eventType: eventForm.eventType || '',
+        kpi: eventForm.kpi || null, // Force include kpi field even if empty
         employees: selectedEmployees,
         tasks: tasksPayload,
         // In edit mode, preserve current status unless specifically changing it
@@ -591,8 +639,8 @@ const EventMaster = () => {
       };
 
       // Add optional fields only if provided
-      if (eventForm.divisionId) {
-        eventData.divisionId = eventForm.divisionId;
+      if (eventForm.division) {
+        eventData.division = eventForm.division;
       }
       
       // Use selectedHODs if available, otherwise fall back to eventForm.hod
@@ -603,6 +651,8 @@ const EventMaster = () => {
       }
 
       console.log('Event data being sent:', JSON.stringify(eventData, null, 2));
+      console.log('Form state before submission:', eventForm);
+      console.log('kpi value:', eventForm.kpi);
 
       // For file uploads, we need to use FormData
       const formData = new FormData();
@@ -613,14 +663,34 @@ const EventMaster = () => {
       }
       
       // Add the JSON data as a string in the 'data' field
-      formData.append('data', JSON.stringify(eventData));
+      // formData.append('data', JSON.stringify(eventData));
 
       // Alternative approach: append each field individually
       // Uncomment this section and comment out the above 'data' append if needed
-      /*
+      
       formData.append('name', eventForm.name);
       formData.append('description', eventForm.description || '');
       formData.append('departmentId', eventForm.departmentId);
+      formData.append('priority', eventForm.priority || '');
+      formData.append('eventType', eventForm.eventType || '');
+      
+      // Ensure KPI field is sent correctly for both create and edit
+      const kpiValue = eventForm.kpi || '';
+      formData.append('kpi', kpiValue);
+      console.log('KPI field added to FormData:', kpiValue, '(type:', typeof kpiValue, ')');
+      
+      // Also try with snake_case in case backend expects it
+      formData.append('kpi_relevance', eventForm.kpi || '');
+      // Try other possible field names
+      formData.append('kpiRelevance', eventForm.kpi || '');
+      formData.append('kpi_type', eventForm.kpi || '');
+      
+      // Debug: Log all FormData entries
+      console.log(`=== FormData contents (${isEditMode ? 'EDIT' : 'CREATE'} mode) ===`);
+      for (let [key, value] of formData.entries()) {
+        console.log(`${key}: ${value}`);
+      }
+      console.log('==========================================');
       
       // Add employees array
       if (selectedEmployees.length > 0) {
@@ -637,7 +707,7 @@ const EventMaster = () => {
         console.log('Tasks JSON being sent:', tasksJson);
         formData.append('tasks', tasksJson);
       }
-      */
+      
 
       const token = localStorage.getItem('raci_auth_token');
       
@@ -646,11 +716,14 @@ const EventMaster = () => {
       const url = isEditMode ? `${env.apiBaseUrl}/events/${editEventId}` : `${env.apiBaseUrl}/events`;
       
       console.log(`${isEditMode ? 'Updating' : 'Creating'} event using ${method} to ${url}`);
+      console.log('Final form state before fetch:', eventForm);
+      console.log('Final KPI value before fetch:', eventForm.kpi);
       
       let response;
       
-      if (eventForm.document) {
-        // Use FormData approach for file uploads
+      // Use different approaches for create vs edit to match working behavior
+      if (isEditMode) {
+        // Use FormData for edit (this works)
         response = await fetch(url, {
           method: method,
           headers: {
@@ -659,14 +732,74 @@ const EventMaster = () => {
           body: formData
         });
       } else {
-        // Use direct JSON approach for no files
+        // For create mode, build the request body explicitly to ensure all fields are included
+        const createRequestBody = {
+          name: eventForm.name,
+          description: eventForm.description || '',
+          departmentId: eventForm.departmentId,
+          priority: eventForm.priority || '',
+          eventType: eventForm.eventType || '',
+          kpi: eventForm.kpi || '', // Explicitly include KPI field
+          employees: selectedEmployees,
+          tasks: tasksPayload,
+          status: 'not_send_for_approval'
+        };
+        
+        // Add optional fields
+        if (eventForm.division) {
+          createRequestBody.division = eventForm.division;
+        }
+        if (selectedHODs.length > 0) {
+          createRequestBody.hod = selectedHODs.join(',');
+        } else if (eventForm.hod) {
+          createRequestBody.hod = eventForm.hod;
+        }
+        
+        // Add optional fields
+        if (eventForm.division) {
+          createRequestBody.division = eventForm.division;
+        }
+        if (selectedHODs.length > 0) {
+          createRequestBody.hod = selectedHODs.join(',');
+        } else if (eventForm.hod) {
+          createRequestBody.hod = eventForm.hod;
+        }
+        
+        // Add multiple KPI field variations to ensure backend receives it
+        if (eventForm.kpi) {
+          createRequestBody.kpi_relevance = eventForm.kpi;
+          createRequestBody.kpiRelevance = eventForm.kpi;
+          createRequestBody.kpi_type = eventForm.kpi;
+        }
+        
+        console.log('=== CREATE MODE - JSON REQUEST ===');
+        console.log('eventForm.kpi:', eventForm.kpi);
+        console.log('eventData.kpi:', eventData.kpi);
+        console.log('createRequestBody.kpi:', createRequestBody.kpi);
+        console.log('createRequestBody.kpi type:', typeof createRequestBody.kpi);
+        console.log('createRequestBody has kpi:', 'kpi' in createRequestBody);
+        console.log('Full JSON:', JSON.stringify(createRequestBody, null, 2));
+        
+        // Final verification - check if KPI field will be in the actual request
+        const finalJson = JSON.stringify(createRequestBody);
+        console.log('Final JSON string length:', finalJson.length);
+        console.log('KPI field in JSON string:', finalJson.includes('"kpi"'));
+        console.log('KPI value in JSON string:', finalJson.includes('"kpi":"KPI"'));
+        console.log('==================================');
+        
+        // Force include KPI field one more time to be sure
+        if (eventForm.kpi) {
+          createRequestBody.kpi = eventForm.kpi;
+          console.log('KPI field forced to:', createRequestBody.kpi);
+        }
+        
         response = await fetch(url, {
           method: method,
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(eventData)
+          body: JSON.stringify(createRequestBody)
         });
       }
 
@@ -696,9 +829,10 @@ const EventMaster = () => {
           name: '',
           description: '',
           departmentId: '',
-          divisionId: '',
+          division: '',
           priority: '',
           eventType: '',
+          kpi: '',
           document: null,
           hod: ''
         });
@@ -1147,7 +1281,7 @@ const EventMaster = () => {
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             onError={(e) => {
               const parent = e.target.parentNode;
-              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}</div>`;
+              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
             }}
           />
         </div>
@@ -1169,7 +1303,7 @@ const EventMaster = () => {
         marginRight: '10px',
         flexShrink: 0
       }}>
-        {companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
       </div>
     );
   };
@@ -1214,9 +1348,10 @@ const EventMaster = () => {
           name: data.name || '',
           description: data.description || '',
           departmentId: data.department?.id || '',
-          divisionId: data.division?.id || '',
+          division: data.division || '',
           priority: data.priority || '',
           eventType: data.eventType || '',
+          kpi: data.kpi || '',
           document: null,
           hod: data.hod || ''
         });
@@ -1278,172 +1413,128 @@ const EventMaster = () => {
   const toggleSidebar = () => setSidebarOpen(prev => !prev);
   
   return (
-    <div className="container mx-auto px-4 py-8" style={{ margin: 0, padding: 0, maxWidth: '100%', width: '100%' }}>
-      <div className="dashboard-layout fix-layout">
-        <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-          <div className="brand" style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '12px',
-            height: '64px',
-            borderBottom: '1px solid rgba(255,255,255,0.1)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-              {renderCompanyLogo()}
-              <span style={{ fontWeight: '600', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white', letterSpacing: '0.5px' }}>
-                {companyData ? companyData.name : 'Company'}
-              </span>
+    <div className="dashboard-layout-new">
+      <header className="dashboard-header-new">
+        <div className="header-left">
+          <div className="company-info">
+            <button 
+              onClick={() => navigate('/company-admin/dashboard')}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
+            {renderCompanyLogo()}
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? companyData.name : 'Company'} Administration
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Event Master
+              </p>
             </div>
           </div>
-
-          <nav>
-            <NavLink to="/company-admin/dashboard" className="nav-item">
-              <i className="icon">📊</i> Dashboard
-            </NavLink>
-
-            <div className="nav-item" onClick={() => toggleSection('users')}>
-              <i className="icon">👥</i> <span>User Administration</span>
-              <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
+        </div>
+        <div className="header-right">
+          <div className="user-info">
+            <div className="user-avatar">
+              {renderUserPhoto()}
             </div>
-            <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-                          <NavLink to="/company-admin/user-creation" className="nav-item">Create User</NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">Update User</NavLink>
+            <div className="user-details">
+              <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
+              <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
             </div>
-
-            <div className="nav-item" onClick={() => toggleSection('departments')}>
-              <i className="icon">🏢</i> <span>Department Workspace</span>
-              <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-            </div>
-            <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-                          <NavLink to="/company-admin/department-creation" className="nav-item">Create Department</NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">Department Workspace</NavLink>
-            </div>
-
-            <div className="nav-item" onClick={() => toggleSection('designations')}>
-              <i className="icon">🏷️</i> <span>Designation Directory</span>
-              <i className={`dropdown-icon ${expandedSections.designations ? 'open' : ''}`}>▼</i>
-            </div>
-            <div className={`sub-nav ${expandedSections.designations ? 'open' : ''}`}>
-              <NavLink to="/company-admin/designation-creation" className="nav-item">Create Designation</NavLink>
-              <NavLink to="/company-admin/designation-management" className="nav-item">Update Designation</NavLink>
-            </div>
-
-            <div className="nav-item" onClick={() => toggleSection('locations')}>
-              <i className="icon">📍</i> <span>Location Center</span>
-              <i className={`dropdown-icon ${expandedSections.locations ? 'open' : ''}`}>▼</i>
-            </div>
-            <div className={`sub-nav ${expandedSections.locations ? 'open' : ''}`}>
-              <NavLink to="/company-admin/location-creation" className="nav-item">Create Location</NavLink>
-              <NavLink to="/company-admin/location-management" className="nav-item">Update Location</NavLink>
-            </div>
-
-            <div className="nav-item active" onClick={() => toggleSection('raci')}>
-              <i className="icon">📅</i> <span>RACI Operations</span>
-              <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-            </div>
-            <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-              <NavLink to="/company-admin/event-master" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>Event Master</NavLink>
-              <NavLink to="/company-admin/event-list" className="nav-item">Event List</NavLink>
-              <NavLink to="/company-admin/raci-assignment" className="nav-item">RACI Assignment</NavLink>
-              <NavLink to="/company-admin/raci-tracker" className="nav-item">RACI Tracker</NavLink>
-            </div>
-
-            <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-              <i className="icon">📆</i> Meeting Calendar
-            </NavLink>
-
-            <NavLink to="/company-admin/hierarchy" className="nav-item">
-              <i className="icon">🏢</i> Hierarchy
-            </NavLink>
-
-            <NavLink to="/company-admin/settings" className="nav-item">
-              <i className="icon">⚙️</i> Company Settings
-            </NavLink>
-
-            <button className="nav-item" onClick={handleLogout} style={{
-              width: '100%',
-              textAlign: 'left',
-              background: 'none',
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#ef4444',
+              color: 'white',
               border: 'none',
-              cursor: 'pointer',
-              padding: '0.75rem 1rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginLeft: '0.5rem',
-              height: '44px',
               borderRadius: '6px',
-              transition: 'background-color 0.2s'
-            }}>
-              <i className="icon">🚪</i> Logout
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+      
+      <main className="dashboard-content-new">
+        <div className="content-wrapper" style={{ padding: '2rem', margin: '0 2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>Create and manage events for your company</h2>
+            </div>
+            <button 
+              className="btn btn-primary" 
+              onClick={() => navigate('/company-admin/event-list')}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: '#4f46e5',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              View All Events
             </button>
-          </nav>
-        </aside>
-
-        {/* Collapse toggle button */}
-        <button onClick={toggleSidebar} style={{
-          position: 'fixed',
-          top: '12px',
-          left: sidebarOpen ? '312px' : '12px',
-          zIndex: 100,
-          background: '#4f46e5',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          padding: '6px 8px',
-          cursor: 'pointer'
+          </div>
+      
+      {/* Error and success messages */}
+      {error && (
+        <div className="alert alert-error" style={{ 
+          padding: '0.75rem 1rem',
+          backgroundColor: '#fee2e2',
+          color: '#b91c1c',
+          borderRadius: '8px',
+          marginBottom: '1.5rem' 
         }}>
-          {sidebarOpen ? '⮜' : '⮞'}
-        </button>
-        
-        <main className="dashboard-content fix-content">
-          <header className="dashboard-header">
-            <div className="dashboard-title">
-              {companyData ? `${companyData.name} Administration` : 'Administration'}
-            </div>
-            <div className="header-actions">
-              <div className="user-info">
-                <div className="user-avatar">
-                  {renderUserPhoto()}
-                </div>
-                <div className="user-details">
-                  <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
-                  <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
-                </div>
-              </div>
-              {/* Logout button removed from header as it exists in the sidebar */}
-            </div>
-          </header>
-          
-          <div className="content-wrapper fix-wrapper">
-            <div className="page-header">
-              <h1>Event Master</h1>
-            </div>
-            
-            {/* Error and success messages */}
-            {error && (
-              <div className="alert alert-error" style={{ 
-                padding: '0.75rem 1rem',
-                backgroundColor: '#fee2e2',
-                color: '#b91c1c',
-                borderRadius: '8px',
-                marginBottom: '1.5rem' 
-              }}>
-                <span>{error}</span>
-              </div>
-            )}
-            
-            {success && (
-              <div className="alert alert-success" style={{ 
-                padding: '0.75rem 1rem',
-                backgroundColor: '#dcfce7',
-                color: '#15803d',
-                borderRadius: '8px',
-                marginBottom: '1.5rem' 
-              }}>
-                <span>{success}</span>
-              </div>
-            )}
+          <span>{error}</span>
+        </div>
+      )}
+      
+      {success && (
+        <div className="alert alert-success" style={{ 
+          padding: '0.75rem 1rem',
+          backgroundColor: '#dcfce7',
+          color: '#15803d',
+          borderRadius: '8px',
+          marginBottom: '1.5rem' 
+        }}>
+          <span>{success}</span>
+        </div>
+      )}
             
             {/* Create Event Form */}
             <div className="card fix-card">
@@ -1518,13 +1609,12 @@ const EventMaster = () => {
                 </div>
                 
                 <div className="form-group">
-                  <label htmlFor="divisionId" style={{ display: 'block', marginBottom: '0.5rem' }}>Division</label>
+                  <label htmlFor="division" style={{ display: 'block', marginBottom: '0.5rem' }}>Division</label>
                   <select
-                    id="divisionId"
-                    name="divisionId"
-                    value={eventForm.divisionId}
+                    id="division"
+                    name="division"
+                    value={eventForm.division}
                     onChange={handleInputChange}
-                    disabled={loadingDivs}
                     style={{
                       width: '100%',
                       padding: '0.75rem 1rem',
@@ -1535,16 +1625,10 @@ const EventMaster = () => {
                     }}
                   >
                     <option value="">Select Division</option>
-                    {divisions.map(div => (
-                      <option key={div.id} value={div.id}>{div.name}</option>
-                    ))}
+                    <option value="Plates & Chemicals (P&C)">Plates & Chemicals (P&C)</option>
+                    <option value="Digital Print Media (DPM)">Digital Print Media (DPM)</option>
+                    <option value="Trading">Trading</option>
                   </select>
-                  {loadingDivs && (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
-                      <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
-                      Loading divisions...
-                    </div>
-                  )}
                 </div>
                 
                 <div className="form-group">
@@ -1763,7 +1847,7 @@ const EventMaster = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="eventType" style={{ display: 'block', marginBottom: '0.5rem' }}>Event Type</label>
+                  <label htmlFor="eventType" style={{ display: 'block', marginBottom: '0.5rem' }}>Type of Event</label>
                   <select
                     id="eventType"
                     name="eventType"
@@ -1778,7 +1862,29 @@ const EventMaster = () => {
                       boxSizing: 'border-box'
                     }}
                   >
-                    <option value="">Select Event Type</option>
+                    <option value="">Select Type of Event</option>
+                    <option value="Operational Event">Operational Event</option>
+                    <option value="Strategic Event">Strategic Event</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="kpi" style={{ display: 'block', marginBottom: '0.5rem' }}>KPI Relevance</label>
+                  <select
+                    id="kpi"
+                    name="kpi"
+                    value={eventForm.kpi}
+                    onChange={handleInputChange}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem 1rem',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '1rem',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <option value="">Select KPI Relevance</option>
                     <option value="KPI">KPI</option>
                     <option value="Non KPI">Non KPI</option>
                   </select>
@@ -2255,9 +2361,10 @@ const EventMaster = () => {
                           name: '',
                           description: '',
                           departmentId: '',
-                          divisionId: '',
+                          division: '',
                           priority: '',
                           eventType: '',
+                          kpi: '', // Add KPI field to reset
                           document: null,
                           hod: ''
                         });
@@ -2342,6 +2449,7 @@ const EventMaster = () => {
                               departmentId: eventForm.departmentId,
                               priority: eventForm.priority || '',
                               eventType: eventForm.eventType || '',
+                              kpi: eventForm.kpi || '', // Add KPI field
                               employees: selectedEmployees,
                               tasks: eventSubtasks.length > 0 
                                 ? eventSubtasks.map(subtask => ({
@@ -2360,8 +2468,8 @@ const EventMaster = () => {
                             console.log('Sending event data for update:', JSON.stringify(eventData, null, 2));
 
                               // Add optional fields only if provided
-                              if (eventForm.divisionId) {
-                                eventData.divisionId = eventForm.divisionId;
+                              if (eventForm.division) {
+                                eventData.division = eventForm.division;
                               }
 
                               const formData = new FormData();
@@ -2373,6 +2481,11 @@ const EventMaster = () => {
                               
                               // Add the JSON data as a string in the 'data' field
                               formData.append('data', JSON.stringify(eventData));
+                              
+                              // Also add KPI field individually to ensure it's captured
+                              if (eventForm.kpi) {
+                                formData.append('kpi', eventForm.kpi);
+                              }
 
                               const token = localStorage.getItem('raci_auth_token');
                               
@@ -2512,6 +2625,7 @@ const EventMaster = () => {
                             departmentId: eventForm.departmentId,
                             priority: eventForm.priority || '',
                             eventType: eventForm.eventType || '',
+                            kpi: eventForm.kpi || '', // Add KPI field
                             employees: selectedEmployees,
                             tasks: eventSubtasks.length > 0 
                               ? eventSubtasks.map(subtask => ({
@@ -2528,8 +2642,8 @@ const EventMaster = () => {
                           };
 
                           // Add optional fields only if provided
-                          if (eventForm.divisionId) {
-                            eventData.divisionId = eventForm.divisionId;
+                          if (eventForm.division) {
+                            eventData.division = eventForm.division;
                           }
 
                           const formData = new FormData();
@@ -2596,9 +2710,10 @@ const EventMaster = () => {
                             name: '',
                             description: '',
                             departmentId: '',
-                            divisionId: '',
+                            division: '',
                             priority: '',
                             eventType: '',
+                            kpi: '', // Add KPI field to reset
                             document: null,
                             hod: ''
                           });
@@ -2639,182 +2754,164 @@ const EventMaster = () => {
             
             {/* Events List moved to separate Event List page */}
             {false && (
-            <div className="card fix-card">
-              <div className="card-header" style={{ 
-                borderBottom: '1px solid #e5e7eb',
-                paddingBottom: '1rem',
-                marginBottom: '1.5rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <h2>Events List</h2>
-                <button 
-                  onClick={fetchEvents}
-                  style={{
-                    padding: '0.5rem',
-                    background: '#f3f4f6',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                  title="Refresh Events"
-                >
-                  🔄
-                </button>
-              </div>
-              
-              {loadingEvents ? (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  alignItems: 'center', 
-                  padding: '2rem',
-                  color: '#6b7280'
+              <div className="card fix-card">
+                <div className="card-header" style={{ 
+                  borderBottom: '1px solid #e5e7eb',
+                  paddingBottom: '1rem',
+                  marginBottom: '1.5rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}>
-                  <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.75rem' }}></div>
-                  Loading events...
+                  <h2>Events List</h2>
+                  <button 
+                    onClick={fetchEvents}
+                    style={{
+                      padding: '0.5rem',
+                      background: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                    title="Refresh Events"
+                  >
+                    🔄
+                  </button>
                 </div>
-              ) : (
-                events.length > 0 ? (
-                  <div className="events-table-container" style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Event Name</th>
-                          <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Department</th>
-                          <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Status</th>
-                          <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Created On</th>
-                          <th style={{ textAlign: 'right', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {events.map(event => (
-                          <tr key={event.id}>
-                            <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>{event.name}</td>
-                            <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
-                              {event.department ? event.department.name : 'N/A'}
-                            </td>
-                            <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
-                              <span style={{
-                                padding: '0.25rem 0.5rem',
-                                borderRadius: '9999px',
-                                fontSize: '0.75rem',
-                                fontWeight: '500',
-                                backgroundColor: 
-                                  event.status === 'approved' ? '#dcfce7' :
-                                  event.status === 'rejected' ? '#fee2e2' : '#f3f4f6',
-                                color: 
-                                  event.status === 'approved' ? '#15803d' :
-                                  event.status === 'rejected' ? '#b91c1c' : '#4b5563'
-                              }}>
-                                {event.status?.charAt(0).toUpperCase() + event.status?.slice(1) || 'Pending'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
-                              {new Date(event.createdAt).toLocaleDateString()}
-                            </td>
-                            <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                <button 
-                                  onClick={() => navigate(`/company-admin/events/${event.id}`)}
-                                  style={{
-                                    padding: '0.5rem',
-                                    background: '#f3f4f6',
-                                    border: '1px solid #d1d5db',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="View Event Details"
-                                >
-                                  👁️
-                                </button>
-                                <button 
-                                  onClick={() => navigate(`/company-admin/events/edit/${event.id}`)}
-                                  style={{
-                                    padding: '0.5rem',
-                                    background: '#f3f4f6',
-                                    border: '1px solid #d1d5db',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Edit Event"
-                                >
-                                  ✏️
-                                </button>
-                                <button 
-                                  onClick={() => openSubtaskForm(event)}
-                                  style={{
-                                    padding: '0.5rem',
-                                    background: '#f3f4f6',
-                                    border: '1px solid #d1d5db',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer'
-                                  }}
-                                  title="Add Subtask"
-                                >
-                                  ➕
-                                </button>
-                                <button 
-                                  onClick={() => handleDeleteEvent(event.id)}
-                                  style={{
-                                    padding: '0.5rem',
-                                    background: '#fee2e2',
-                                    border: '1px solid #fecaca',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    color: '#b91c1c'
-                                  }}
-                                  title="Delete Event"
-                                >
-                                  🗑️
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                
+                {loadingEvents ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    padding: '2rem',
+                    color: '#6b7280'
+                  }}>
+                    <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.75rem' }}></div>
+                    Loading events...
                   </div>
                 ) : (
-                  <div style={{ 
-                    padding: '2rem', 
-                    textAlign: 'center',
-                    color: '#6b7280',
-                    border: '1px dashed #d1d5db',
-                    borderRadius: '8px'
-                  }}>
-                    <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📝</div>
-                    <p style={{ marginBottom: '1rem' }}>No events have been created yet.</p>
-                    <p>Create your first event using the form above.</p>
-                  </div>
-                )
-              )}
-            </div>
+                  events.length > 0 ? (
+                    <div className="events-table-container" style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Event Name</th>
+                            <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Department</th>
+                            <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Status</th>
+                            <th style={{ textAlign: 'left', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Created On</th>
+                            <th style={{ textAlign: 'right', padding: '1rem', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {events.map(event => (
+                            <tr key={event.id}>
+                              <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>{event.name}</td>
+                              <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
+                                {event.department ? event.department.name : 'N/A'}
+                              </td>
+                              <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
+                                <span style={{
+                                  padding: '0.25rem 0.5rem',
+                                  borderRadius: '9999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '500',
+                                  backgroundColor: 
+                                    event.status === 'approved' ? '#dcfce7' :
+                                    event.status === 'rejected' ? '#fee2e2' : '#f3f4f6',
+                                  color: 
+                                    event.status === 'approved' ? '#15803d' :
+                                    event.status === 'rejected' ? '#b91c1c' : '#4b5563'
+                                }}>
+                                  {event.status?.charAt(0).toUpperCase() + event.status?.slice(1) || 'Pending'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb' }}>
+                                {new Date(event.createdAt).toLocaleDateString()}
+                              </td>
+                              <td style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', textAlign: 'right' }}>
+                                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                  <button 
+                                    onClick={() => navigate(`/company-admin/events/${event.id}`)}
+                                    style={{
+                                      padding: '0.5rem',
+                                      background: '#f3f4f6',
+                                      border: '1px solid #d1d5db',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="View Event Details"
+                                  >
+                                    👁️
+                                  </button>
+                                  <button 
+                                    onClick={() => navigate(`/company-admin/events/edit/${event.id}`)}
+                                    style={{
+                                      padding: '0.5rem',
+                                      background: '#f3f4f6',
+                                      border: '1px solid #d1d5db',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="Edit Event"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    onClick={() => openSubtaskForm(event)}
+                                    style={{
+                                      padding: '0.5rem',
+                                      background: '#f3f4f6',
+                                      border: '1px solid #d1d5db',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="Add Subtask"
+                                  >
+                                    ➕
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteEvent(event.id)}
+                                    style={{
+                                      padding: '0.5rem',
+                                      background: '#fee2e2',
+                                      border: '1px solid #fecaca',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      color: '#b91c1c'
+                                    }}
+                                    title="Delete Event"
+                                  >
+                                    🗑️
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      padding: '2rem', 
+                      textAlign: 'center',
+                      color: '#6b7280',
+                      border: '1px dashed #d1d5db',
+                      borderRadius: '8px'
+                    }}>
+                      <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📝</div>
+                      <p style={{ marginBottom: '1rem' }}>No events have been created yet.</p>
+                      <p>Create your first event using the form above.</p>
+                    </div>
+                  )
+                )}
+              </div>
             )}
+            
+            {renderSubtaskForm()}
           </div>
-          
-          <style jsx="true" global="true">{`
-            .fix-wrapper {
-              padding: 1.5rem 2rem 1.5rem 1.5rem !important; /* extra right padding */
-              margin: 0 !important;
-              max-width: 100% !important;
-              box-sizing: border-box !important;
-              width: 100% !important;
-            }
-
-            .dashboard-content {
-              flex: 1;
-              display: flex;
-              flex-direction: column;
-              min-width: 0; /* allow content to shrink inside flex */
-            }
-          `}</style>
         </main>
       </div>
-
-      {renderSubtaskForm()}
-    </div>
   );
 };
 

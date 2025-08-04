@@ -1,14 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactFlow, { Background, Controls, MarkerType, useNodesState, useEdgesState } from 'reactflow';
 import 'reactflow/dist/style.css';
 import env from '../../src/config/env';
 
 const HierarchyPage = () => {
+  const navigate = useNavigate();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isHOD, setIsHOD] = useState(false);
+
+  const handleBackToDashboard = () => {
+    navigate('/user/raci-dashboard');
+  };
 
   useEffect(() => {
     const buildHierarchy = async () => {
@@ -507,15 +513,15 @@ const HierarchyPage = () => {
   if (error) return <div style={{ padding: '1rem', color: '#b91c1c' }}>{error}</div>;
 
   return (
-    <div style={{ padding: '1rem', height: '100vh' }}>
-      <div style={{ marginBottom: '1rem' }}>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
+      <div className="page-header" style={{ position: 'relative', marginBottom: '2rem', textAlign: 'center' }}>
         <h1 style={{ margin: 0, color: '#1f2937', fontSize: '28px', fontWeight: 'bold' }}>
           {isHOD ? 'Department Hierarchy' : 'Organisation Hierarchy'}
         </h1>
       </div>
       
       <div style={{ 
-        height: 'calc(100vh - 120px)', 
+        height: 'calc(100vh - 200px)', 
         border: '1px solid #e5e7eb', 
         borderRadius: '8px',
         background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)'

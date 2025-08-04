@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import apiService from '../../src/services/api';
 import authService from '../../src/services/auth.service';
-import '../../styles/dashboard.scss';
 import env from '../../src/config/env';
 
 // Helper to build correct asset URLs
@@ -26,16 +25,6 @@ const CreateLocation = () => {
     name: ''
   });
   
-  // State for expanded sections in sidebar
-  const [expandedSections, setExpandedSections] = useState({
-    users: false,
-    departments: false,
-    designations: false,
-    locations: true, // Auto-expand Location section
-    raci: false
-  });
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  
   // State for loading and messages
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -46,21 +35,15 @@ const CreateLocation = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingCompany, setLoadingCompany] = useState(true);
   
-  // Toggle sidebar sections
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-  
-  const toggleSidebar = () => setSidebarOpen(prev => !prev);
-  
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {
       localStorage.removeItem('raci_auth_token');
       navigate('/auth/login');
     }
+  };
+
+  const handleBackToDashboard = () => {
+    navigate('/company-admin/dashboard');
   };
   
   // Load user and company data
@@ -98,7 +81,6 @@ const CreateLocation = () => {
               });
             }
           } catch (error) {
-            console.error('Failed to fetch company details:', error);
             setCompanyData({
               id: userData.company.id,
               name: userData.company.name || 'Your Company'
@@ -114,8 +96,7 @@ const CreateLocation = () => {
     
     fetchUserAndCompany();
   }, []);
-  
-  // Handle input change
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setLocationForm(prev => ({
@@ -123,61 +104,32 @@ const CreateLocation = () => {
       [name]: value
     }));
   };
-  
-  // Handle form submission
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
     setError('');
     setSuccess('');
     
+    if (!locationForm.name.trim()) {
+      setError('Location name is required');
+      return;
+    }
+    
+    setSubmitting(true);
     try {
-      if (!locationForm.name.trim()) {
-        throw new Error('Location name is required');
-      }
-      
-      const token = localStorage.getItem('raci_auth_token');
-      const response = await fetch(`${env.apiBaseUrl}/locations`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: locationForm.name.trim()
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || `Failed to create location: ${response.status}`;
-        console.error('API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData,
-          endpoint: `${env.apiBaseUrl}/locations`
-        });
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
-      console.log('Location created successfully:', data);
+      await apiService.post('/locations', { name: locationForm.name.trim() });
       setSuccess('Location created successfully!');
-      
-      // Reset form
-      setLocationForm({
-        name: ''
-      });
-      
-    } catch (error) {
-      console.error('Error creating location:', error);
-      setError(error.message || 'Failed to create location. Please try again.');
+      setLocationForm({ name: '' });
+      setTimeout(() => {
+        navigate('/company-admin/location-management');
+      }, 1200);
+    } catch (err) {
+      setError(err.message || 'Failed to create location');
     } finally {
       setSubmitting(false);
     }
   };
-  
-  // Enhanced logo rendering methods
+
   const renderCompanyLogo = () => {
     if (!companyData) return null;
     
@@ -211,6 +163,7 @@ const CreateLocation = () => {
               objectFit: 'contain'
             }}
             onError={(e) => {
+              console.log("Logo failed to load, using fallback");
               const parent = e.target.parentNode;
               parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
             }}
@@ -241,9 +194,10 @@ const CreateLocation = () => {
 
   const renderUserPhoto = () => {
     if (!currentUser) return null;
+    
     const photoUrl = currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto;
     if (photoUrl) {
-      const finalUrl = getAssetUrl(photoUrl);
+      const finalUrl = photoUrl.startsWith('http') ? photoUrl : `${env.apiHost}${photoUrl}`;
       return (
         <img
           src={finalUrl}
@@ -260,254 +214,190 @@ const CreateLocation = () => {
   };
   
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-        <div className="brand" style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '12px',
-          height: '64px',
-          borderBottom: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+    <div>
+      {/* Top Navbar/Header */}
+      <header className="dashboard-header-new" style={{
+        background: 'white',
+        borderBottom: '1px solid #e5e7eb',
+        padding: '1rem 2rem',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
+      }}>
+        <div className="header-left" style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="company-info" style={{ display: 'flex', alignItems: 'center' }}>
+            <button 
+              onClick={handleBackToDashboard}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
             {renderCompanyLogo()}
-            <span style={{ fontWeight: '600', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white', letterSpacing: '0.5px' }}>
-              {companyData ? companyData.name : 'Company'}
-            </span>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? `${companyData.name} Administration` : 'Administration'}
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Create Location
+              </p>
+            </div>
           </div>
         </div>
-
-        <nav>
-          <NavLink to="/company-admin/dashboard" className="nav-item">
-            <i className="icon">📊</i> Dashboard
-          </NavLink>
-
-          <div className="nav-item" onClick={() => toggleSection('users')}>
-            <i className="icon">👥</i> <span>User Administration</span>
-            <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-            <NavLink to="/company-admin/user-creation" className="nav-item">Create User</NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">Update User</NavLink>
-          </div>
-
-          <div className="nav-item" onClick={() => toggleSection('departments')}>
-            <i className="icon">🏢</i> <span>Department Workspace</span>
-            <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-            <NavLink to="/company-admin/department-creation" className="nav-item">Create Department</NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">Department Workspace</NavLink>
-          </div>
-
-          <div className="nav-item" onClick={() => toggleSection('designations')}>
-            <i className="icon">🏷️</i> <span>Designation Directory</span>
-            <i className={`dropdown-icon ${expandedSections.designations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.designations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/designation-creation" className="nav-item">Create Designation</NavLink>
-            <NavLink to="/company-admin/designation-management" className="nav-item">Update Designation</NavLink>
-          </div>
-
-          <div className="nav-item active" onClick={() => toggleSection('locations')}>
-            <i className="icon">📍</i> <span>Location Center</span>
-            <i className={`dropdown-icon ${expandedSections.locations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.locations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/location-creation" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>Create Location</NavLink>
-            <NavLink to="/company-admin/location-management" className="nav-item">Update Location</NavLink>
-          </div>
-
-          <div className="nav-item" onClick={() => toggleSection('raci')}>
-            <i className="icon">📅</i> <span>RACI Operations</span>
-            <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-            <NavLink to="/company-admin/event-master" className="nav-item">Event Master</NavLink>
-            <NavLink to="/company-admin/event-list" className="nav-item">Event List</NavLink>
-            <NavLink to="/company-admin/raci-assignment" className="nav-item">RACI Assignment</NavLink>
-            <NavLink to="/company-admin/raci-tracker" className="nav-item">RACI Tracker</NavLink>
-          </div>
-
-          <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-            <i className="icon">📆</i> Meeting Calendar
-          </NavLink>
-
-          <NavLink to="/company-admin/hierarchy" className="nav-item">
-            <i className="icon">🏢</i> Hierarchy
-          </NavLink>
-
-          <NavLink to="/company-admin/settings" className="nav-item">
-            <i className="icon">⚙️</i> Company Settings
-          </NavLink>
-
-          <button className="nav-item" onClick={handleLogout} style={{
-            width: '100%',
-            textAlign: 'left',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginLeft: '0.5rem',
-            height: '44px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}>
-            <i className="icon">🚪</i> Logout
-          </button>
-        </nav>
-      </aside>
-
-      {/* Collapse toggle button */}
-      <button onClick={toggleSidebar} style={{
-        position: 'fixed',
-        top: '12px',
-        left: sidebarOpen ? '312px' : '12px',
-        zIndex: 100,
-        background: '#4f46e5',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 8px',
-        cursor: 'pointer'
-      }}>
-        {sidebarOpen ? '⮜' : '⮞'}
-      </button>
-
-      <main className="dashboard-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">
-            {companyData ? `${companyData.name} Administration` : 'Administration'}
-          </div>
-          <div className="header-actions">
-            <div className="user-info">
-              <div className="user-avatar">
-                {renderUserPhoto()}
-              </div>
-              <div className="user-details">
-                <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
-                <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
-              </div>
+        <div className="header-actions">
+          <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div className="user-avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '1rem', overflow: 'hidden' }}>
+              {renderUserPhoto()}
             </div>
+            <div className="user-details" style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="user-name" style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111827' }}>{currentUser ? currentUser.name : 'Loading...'}</div>
+              <div className="user-role" style={{ fontSize: '0.8rem', color: '#6b7280' }}>{currentUser ? currentUser.role : 'Loading...'}</div>
+            </div>
+            <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500', transition: 'all 0.2s ease' }}>Logout</button>
           </div>
-        </header>
+        </div>
+      </header>
+      <div style={{ padding: '2rem', margin: '0 2rem' }}>
+        <div className="page-header">
+          <h1>Create Location</h1>
+          <p>Add a new location to your company</p>
+        </div>
         
-        <div className="content-wrapper">
-          <div className="page-header">
-            <h1>Create Location</h1>
-            <p>Add a new location to your company</p>
+        {/* Error and success messages */}
+        {error && (
+          <div className="alert alert-error" style={{ 
+            padding: '0.75rem 1rem',
+            backgroundColor: '#fee2e2',
+            color: '#b91c1c',
+            borderRadius: '8px',
+            marginBottom: '1.5rem' 
+          }}>
+            <span>{error}</span>
+          </div>
+        )}
+        
+        {success && (
+          <div className="alert alert-success" style={{ 
+            padding: '0.75rem 1rem',
+            backgroundColor: '#dcfce7',
+            color: '#15803d',
+            borderRadius: '8px',
+            marginBottom: '1.5rem' 
+          }}>
+            <span>{success}</span>
+          </div>
+        )}
+        
+        {/* Create Location Form */}
+        <div className="card" style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          marginBottom: '1.5rem'
+        }}>
+          <div className="card-header" style={{ 
+            borderBottom: '1px solid #e5e7eb',
+            paddingBottom: '1rem',
+            marginBottom: '1.5rem'
+          }}>
+            <h2>Location Details</h2>
           </div>
           
-          {/* Error and success messages */}
-          {error && (
-            <div className="alert alert-error" style={{ 
-              padding: '0.75rem 1rem',
-              backgroundColor: '#fee2e2',
-              color: '#b91c1c',
-              borderRadius: '8px',
-              marginBottom: '1.5rem' 
-            }}>
-              <span>{error}</span>
-            </div>
-          )}
-          
-          {success && (
-            <div className="alert alert-success" style={{ 
-              padding: '0.75rem 1rem',
-              backgroundColor: '#dcfce7',
-              color: '#15803d',
-              borderRadius: '8px',
-              marginBottom: '1.5rem' 
-            }}>
-              <span>{success}</span>
-            </div>
-          )}
-          
-          {/* Create Location Form */}
-          <div className="card">
-            <div className="card-header" style={{ 
-              borderBottom: '1px solid #e5e7eb',
-              paddingBottom: '1rem',
-              marginBottom: '1.5rem'
-            }}>
-              <h2>Location Details</h2>
+          <form onSubmit={handleSubmit} className="form-grid">
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Location Name *</label>
+              <input
+                type="text"
+                id="name"
+                name="name"
+                value={locationForm.name}
+                onChange={handleInputChange}
+                required
+                placeholder="Enter location name"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
+                Enter a clear location name that will be used in dropdown selections.
+              </p>
             </div>
             
-            <form onSubmit={handleSubmit} className="form-grid">
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Location Name *</label>
-                <input
-                  type="text"
-                  id="name"
-                  name="name"
-                  value={locationForm.name}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="e.g. New York, USA | London, UK | Mumbai, India"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem 1rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    fontSize: '1rem',
-                    boxSizing: 'border-box'
-                  }}
-                />
-                <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
-                  Enter a clear location name that will be used in dropdown selections for user creation.
-                </p>
-              </div>
-              
-              <div className="form-actions" style={{
-                marginTop: '20px', 
-                display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: '12px',
-                borderTop: '1px solid #e5e7eb',
-                paddingTop: '1.25rem',
-                gridColumn: '1 / -1'
-              }}>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setLocationForm({ name: '' });
-                    setError('');
-                    setSuccess('');
-                  }}
-                  style={{ 
-                    padding: '0.75rem 1.25rem', 
-                    background: '#f3f4f6', 
-                    border: '1px solid #d1d5db', 
-                    borderRadius: '8px',
-                    fontWeight: '500',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Reset
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={submitting}
-                  style={{ 
-                    padding: '0.75rem 1.5rem', 
-                    background: submitting ? '#94a3b8' : '#4f46e5', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '8px',
-                    fontWeight: '500',
-                    cursor: submitting ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {submitting ? 'Creating...' : 'Create Location'}
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="form-actions" style={{
+              marginTop: '20px', 
+              display: 'flex', 
+              justifyContent: 'flex-end', 
+              gap: '12px',
+              borderTop: '1px solid #e5e7eb',
+              paddingTop: '1.25rem',
+              gridColumn: '1 / -1'
+            }}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setLocationForm({ name: '' });
+                  setError('');
+                  setSuccess('');
+                }}
+                style={{ 
+                  padding: '0.75rem 1.25rem', 
+                  background: '#f3f4f6', 
+                  border: '1px solid #d1d5db', 
+                  borderRadius: '8px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                Reset
+              </button>
+              <button 
+                type="submit" 
+                disabled={submitting}
+                style={{ 
+                  padding: '0.75rem 1.5rem', 
+                  background: submitting ? '#94a3b8' : '#4f46e5', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '8px',
+                  fontWeight: '500',
+                  cursor: submitting ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {submitting ? 'Creating...' : 'Create Location'}
+              </button>
+            </div>
+          </form>
         </div>
-      </main>
+      </div>
     </div>
   );
 };

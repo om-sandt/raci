@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import apiService from '../../src/services/api';
 import authService from '../../src/services/auth.service';
-import '../../styles/dashboard.scss';
 import env from '../../src/config/env';
 
 // Helper to build correct asset URLs
@@ -35,36 +34,20 @@ const LocationManagement = () => {
   });
   const [saving, setSaving] = useState(false);
   
-  // State for expanded sections in sidebar
-  const [expandedSections, setExpandedSections] = useState({
-    users: false,
-    departments: false,
-    designations: false,
-    locations: true, // Auto-expand Location section
-    raci: false
-  });
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  
   // State for company data
   const [companyData, setCompanyData] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [loadingCompany, setLoadingCompany] = useState(true);
-  
-  // Toggle sidebar sections
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-  
-  const toggleSidebar = () => setSidebarOpen(prev => !prev);
   
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {
       localStorage.removeItem('raci_auth_token');
       navigate('/auth/login');
     }
+  };
+
+  const handleBackToDashboard = () => {
+    navigate('/company-admin/dashboard');
   };
   
   // Load user and company data
@@ -102,7 +85,6 @@ const LocationManagement = () => {
               });
             }
           } catch (error) {
-            console.error('Failed to fetch company details:', error);
             setCompanyData({
               id: userData.company.id,
               name: userData.company.name || 'Your Company'
@@ -117,165 +99,71 @@ const LocationManagement = () => {
     };
     
     fetchUserAndCompany();
+    fetchLocations();
   }, []);
-  
-  // Fetch locations
+
   const fetchLocations = async () => {
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      setError('');
-      
-      const token = localStorage.getItem('raci_auth_token');
-      const response = await fetch(`${env.apiBaseUrl}/locations`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error fetching locations:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData,
-          endpoint: `${env.apiBaseUrl}/locations`
-        });
-        throw new Error(`Failed to fetch locations: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setLocations(data.data || data || []);
-      console.log('Locations loaded successfully:', data);
-      
-    } catch (error) {
-      console.error('Error fetching locations:', error);
-      setError('Failed to load locations. Please try again.');
-      setLocations([]);
+      const response = await apiService.get('/locations');
+      setLocations(response.data || []);
+    } catch (err) {
+      setError('Failed to load locations');
     } finally {
       setLoading(false);
     }
   };
-  
-  // Load locations on component mount
-  useEffect(() => {
-    fetchLocations();
-  }, []);
-  
-  // Handle edit location
+
   const handleEdit = (location) => {
     setEditingLocation(location);
-    setEditForm({
-      name: location.name
-    });
+    setEditForm({ name: location.name });
     setShowEditModal(true);
+    setError('');
+    setSuccess('');
   };
-  
-  // Handle form input change
+
   const handleEditInputChange = (e) => {
-    const { name, value } = e.target;
-    setEditForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setEditForm({ ...editForm, [e.target.name]: e.target.value });
   };
-  
-  // Handle save edit
+
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError('');
-    
+    setSuccess('');
     try {
-      if (!editForm.name.trim()) {
-        throw new Error('Location name is required');
-      }
-      
-      const token = localStorage.getItem('raci_auth_token');
-      const response = await fetch(`${env.apiBaseUrl}/locations/${editingLocation.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: editForm.name.trim()
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error updating location:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData,
-          endpoint: `${env.apiBaseUrl}/locations/${editingLocation.id}`
-        });
-        throw new Error(`Failed to update location: ${response.status}`);
-      }
-      
-      const updatedData = await response.json();
-      console.log('Location updated successfully:', updatedData);
-      
+      await apiService.put(`/locations/${editingLocation.id}`, editForm);
       setSuccess('Location updated successfully!');
       setShowEditModal(false);
       setEditingLocation(null);
-      
-      // Refresh the locations list
-      await fetchLocations();
-      
-    } catch (error) {
-      console.error('Error updating location:', error);
-      setError(error.message || 'Failed to update location. Please try again.');
+      setEditForm({ name: '' });
+      fetchLocations();
+    } catch (err) {
+      setError(err.message || 'Failed to update location');
     } finally {
       setSaving(false);
     }
   };
-  
-  // Handle delete location
+
   const handleDelete = async (location) => {
     if (window.confirm(`Are you sure you want to delete the location "${location.name}"? This action cannot be undone.`)) {
       try {
         setError('');
-        
-        const token = localStorage.getItem('raci_auth_token');
-        const response = await fetch(`${env.apiBaseUrl}/locations/${location.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('API Error deleting location:', {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorData,
-            endpoint: `${env.apiBaseUrl}/locations/${location.id}`
-          });
-          throw new Error(`Failed to delete location: ${response.status}`);
-        }
-        
+        setSuccess('');
+        await apiService.delete(`/locations/${location.id}`);
         setSuccess('Location deleted successfully!');
-        
-        // Refresh the locations list
-        await fetchLocations();
-        
-      } catch (error) {
-        console.error('Error deleting location:', error);
-        setError(error.message || 'Failed to delete location. Please try again.');
+        fetchLocations();
+      } catch (err) {
+        setError(err.message || 'Failed to delete location');
       }
     }
   };
-  
-  // Handle refresh
+
   const handleRefresh = () => {
     fetchLocations();
   };
-  
-  // Enhanced logo rendering methods
+
   const renderCompanyLogo = () => {
     if (!companyData) return null;
     
@@ -309,6 +197,7 @@ const LocationManagement = () => {
               objectFit: 'contain'
             }}
             onError={(e) => {
+              console.log("Logo failed to load, using fallback");
               const parent = e.target.parentNode;
               parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
             }}
@@ -339,9 +228,10 @@ const LocationManagement = () => {
 
   const renderUserPhoto = () => {
     if (!currentUser) return null;
+    
     const photoUrl = currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto;
     if (photoUrl) {
-      const finalUrl = getAssetUrl(photoUrl);
+      const finalUrl = photoUrl.startsWith('http') ? photoUrl : `${env.apiHost}${photoUrl}`;
       return (
         <img
           src={finalUrl}
@@ -358,500 +248,328 @@ const LocationManagement = () => {
   };
   
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-        <div className="brand" style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '12px',
-          height: '64px',
-          borderBottom: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-            {renderCompanyLogo()}
-            <span style={{ fontWeight: '600', fontSize: '16px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white', letterSpacing: '0.5px' }}>
-              {companyData ? companyData.name : 'Company'}
-            </span>
-          </div>
-        </div>
-
-        <nav>
-          <NavLink to="/company-admin/dashboard" className="nav-item">
-            <i className="icon">📊</i> Dashboard
-          </NavLink>
-
-          <div className="nav-item" onClick={() => toggleSection('users')}>
-            <i className="icon">👥</i> <span>User Administration</span>
-            <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-            <NavLink to="/company-admin/user-creation" className="nav-item">Create User</NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">Update User</NavLink>
-          </div>
-
-          <div className="nav-item" onClick={() => toggleSection('departments')}>
-            <i className="icon">🏢</i> <span>Department Workspace</span>
-            <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-            <NavLink to="/company-admin/department-creation" className="nav-item">Create Department</NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">Department Workspace</NavLink>
-          </div>
-
-          <div className="nav-item" onClick={() => toggleSection('designations')}>
-            <i className="icon">🏷️</i> <span>Designation Directory</span>
-            <i className={`dropdown-icon ${expandedSections.designations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.designations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/designation-creation" className="nav-item">Create Designation</NavLink>
-            <NavLink to="/company-admin/designation-management" className="nav-item">Update Designation</NavLink>
-          </div>
-
-          <div className="nav-item active" onClick={() => toggleSection('locations')}>
-            <i className="icon">📍</i> <span>Location Center</span>
-            <i className={`dropdown-icon ${expandedSections.locations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.locations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/location-creation" className="nav-item">Create Location</NavLink>
-            <NavLink to="/company-admin/location-management" className={({isActive}) => isActive ? 'nav-item active' : 'nav-item'}>Update Location</NavLink>
-          </div>
-
-          <div className="nav-item" onClick={() => toggleSection('raci')}>
-            <i className="icon">📅</i> <span>RACI Operations</span>
-            <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-            <NavLink to="/company-admin/event-master" className="nav-item">Event Master</NavLink>
-            <NavLink to="/company-admin/event-list" className="nav-item">Event List</NavLink>
-            <NavLink to="/company-admin/raci-assignment" className="nav-item">RACI Assignment</NavLink>
-            <NavLink to="/company-admin/raci-tracker" className="nav-item">RACI Tracker</NavLink>
-          </div>
-
-          <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-            <i className="icon">📆</i> Meeting Calendar
-          </NavLink>
-
-          <NavLink to="/company-admin/hierarchy" className="nav-item">
-            <i className="icon">🏢</i> Hierarchy
-          </NavLink>
-
-          <NavLink to="/company-admin/settings" className="nav-item">
-            <i className="icon">⚙️</i> Company Settings
-          </NavLink>
-
-          <button className="nav-item" onClick={handleLogout} style={{
-            width: '100%',
-            textAlign: 'left',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginLeft: '0.5rem',
-            height: '44px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}>
-            <i className="icon">🚪</i> Logout
-          </button>
-        </nav>
-      </aside>
-
-      {/* Collapse toggle button */}
-      <button onClick={toggleSidebar} style={{
-        position: 'fixed',
-        top: '12px',
-        left: sidebarOpen ? '312px' : '12px',
-        zIndex: 100,
-        background: '#4f46e5',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 8px',
-        cursor: 'pointer'
+    <div>
+      {/* Top Navbar/Header */}
+      <header className="dashboard-header-new" style={{
+        background: 'white',
+        borderBottom: '1px solid #e5e7eb',
+        padding: '1rem 2rem',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100
       }}>
-        {sidebarOpen ? '⮜' : '⮞'}
-      </button>
-
-      <main className="dashboard-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">
-            {companyData ? `${companyData.name} Administration` : 'Administration'}
-          </div>
-          <div className="header-actions">
-            <div className="user-info">
-              <div className="user-avatar">
-                {renderUserPhoto()}
-              </div>
-              <div className="user-details">
-                <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
-                <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
-              </div>
-            </div>
-          </div>
-        </header>
-        
-        <div className="content-wrapper">
-          <div className="page-header">
-            <h1>Location Center</h1>
-            <p>Manage company locations and office addresses</p>
-          </div>
-          
-          {/* Error and success messages */}
-          {error && (
-            <div className="alert alert-error" style={{ 
-              padding: '0.75rem 1rem',
-              backgroundColor: '#fee2e2',
-              color: '#b91c1c',
-              borderRadius: '8px',
-              marginBottom: '1.5rem' 
-            }}>
-              <span>{error}</span>
-            </div>
-          )}
-          
-          {success && (
-            <div className="alert alert-success" style={{ 
-              padding: '0.75rem 1rem',
-              backgroundColor: '#dcfce7',
-              color: '#15803d',
-              borderRadius: '8px',
-              marginBottom: '1.5rem' 
-            }}>
-              <span>{success}</span>
-            </div>
-          )}
-          
-          {/* Locations Table */}
-          <div className="card">
-            <div className="card-header" style={{ 
-              borderBottom: '1px solid #e5e7eb',
-              paddingBottom: '1rem',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <h2>All Locations</h2>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <button 
-                  onClick={handleRefresh}
-                  style={{
-                    padding: '0.5rem',
-                    background: '#f3f4f6',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  title="Refresh List"
-                >
-                  🔄
-                </button>
-                <button 
-                  onClick={() => navigate('/company-admin/location-creation')}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: '#4f46e5',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  + Add New
-                </button>
-              </div>
-            </div>
-            
-            {loading ? (
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center', 
-                padding: '3rem',
-                color: '#6b7280'
-              }}>
-                <div style={{ 
-                  width: '20px', 
-                  height: '20px', 
-                  borderRadius: '50%', 
-                  border: '2px solid #e5e7eb', 
-                  borderTopColor: '#6366f1', 
-                  animation: 'spin 1s linear infinite', 
-                  marginRight: '0.75rem' 
-                }}></div>
-                Loading locations...
-              </div>
-            ) : locations.length > 0 ? (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f9fafb' }}>
-                      <th style={{ 
-                        textAlign: 'left', 
-                        padding: '0.75rem 1rem', 
-                        borderBottom: '1px solid #e5e7eb', 
-                        fontWeight: '600',
-                        color: '#374151'
-                      }}>
-                        Location Name
-                      </th>
-                      <th style={{ 
-                        textAlign: 'left', 
-                        padding: '0.75rem 1rem', 
-                        borderBottom: '1px solid #e5e7eb', 
-                        fontWeight: '600',
-                        color: '#374151'
-                      }}>
-                        Created Date
-                      </th>
-                      <th style={{ 
-                        textAlign: 'left', 
-                        padding: '0.75rem 1rem', 
-                        borderBottom: '1px solid #e5e7eb', 
-                        fontWeight: '600',
-                        color: '#374151'
-                      }}>
-                        Last Modified
-                      </th>
-                      <th style={{ 
-                        textAlign: 'right', 
-                        padding: '0.75rem 1rem', 
-                        borderBottom: '1px solid #e5e7eb', 
-                        fontWeight: '600',
-                        color: '#374151'
-                      }}>
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {locations.map((location) => (
-                      <tr key={location.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                        <td style={{ 
-                          padding: '1rem', 
-                          borderBottom: '1px solid #e5e7eb',
-                          fontWeight: '500',
-                          color: '#111827'
-                        }}>
-                          {location.name}
-                        </td>
-                        <td style={{ 
-                          padding: '1rem', 
-                          borderBottom: '1px solid #e5e7eb',
-                          color: '#6b7280'
-                        }}>
-                          {location.createdAt ? new Date(location.createdAt).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td style={{ 
-                          padding: '1rem', 
-                          borderBottom: '1px solid #e5e7eb',
-                          color: '#6b7280'
-                        }}>
-                          {location.updatedAt ? new Date(location.updatedAt).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td style={{ 
-                          padding: '1rem', 
-                          borderBottom: '1px solid #e5e7eb',
-                          textAlign: 'right'
-                        }}>
-                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                            <button 
-                              onClick={() => handleEdit(location)}
-                              style={{
-                                padding: '0.375rem 0.75rem',
-                                background: '#f3f4f6',
-                                border: '1px solid #d1d5db',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                fontWeight: '500',
-                                color: '#374151'
-                              }}
-                              title="Edit Location"
-                            >
-                              ✏️ Edit
-                            </button>
-                            <button 
-                              onClick={() => handleDelete(location)}
-                              style={{
-                                padding: '0.375rem 0.75rem',
-                                background: '#fee2e2',
-                                border: '1px solid #fecaca',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                fontSize: '0.875rem',
-                                fontWeight: '500',
-                                color: '#b91c1c'
-                              }}
-                              title="Delete Location"
-                            >
-                              🗑️ Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div style={{ 
-                padding: '3rem', 
-                textAlign: 'center',
-                color: '#6b7280',
-                border: '1px dashed #d1d5db',
+        <div className="header-left" style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="company-info" style={{ display: 'flex', alignItems: 'center' }}>
+            <button 
+              onClick={handleBackToDashboard}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
                 borderRadius: '8px',
-                margin: '1rem'
-              }}>
-                <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📍</div>
-                <p style={{ marginBottom: '1rem', fontWeight: '500' }}>No locations found</p>
-                <p style={{ marginBottom: '1.5rem' }}>Create your first location to get started.</p>
-                <button 
-                  onClick={() => navigate('/company-admin/location-creation')}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: '#4f46e5',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  Create Location
-                </button>
-              </div>
-            )}
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
+            {renderCompanyLogo()}
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? `${companyData.name} Administration` : 'Administration'}
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Location Directory
+              </p>
+            </div>
           </div>
         </div>
-      </main>
-
-      {/* Edit Modal */}
-      {showEditModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
+        <div className="header-actions">
+          <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div className="user-avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '1rem', overflow: 'hidden' }}>
+              {renderUserPhoto()}
+            </div>
+            <div className="user-details" style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="user-name" style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111827' }}>{currentUser ? currentUser.name : 'Loading...'}</div>
+              <div className="user-role" style={{ fontSize: '0.8rem', color: '#6b7280' }}>{currentUser ? currentUser.role : 'Loading...'}</div>
+            </div>
+            <button onClick={handleLogout} style={{ padding: '0.5rem 1rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500', transition: 'all 0.2s ease' }}>Logout</button>
+          </div>
+        </div>
+      </header>
+      <div style={{ padding: '2rem', margin: '0 2rem' }}>
+        <div className="page-header">
+          <h1>Location Directory</h1>
+          <p>Manage company locations and offices</p>
+        </div>
+        
+        {error && (
+          <div className="alert alert-error" style={{ 
+            padding: '0.75rem 1rem',
+            backgroundColor: '#fee2e2',
+            color: '#b91c1c',
             borderRadius: '8px',
-            padding: '1.5rem',
-            width: '100%',
-            maxWidth: '500px',
-            margin: '1rem'
+            marginBottom: '1.5rem' 
           }}>
+            <span>{error}</span>
+          </div>
+        )}
+        
+        {success && (
+          <div className="alert alert-success" style={{ 
+            padding: '0.75rem 1rem',
+            backgroundColor: '#dcfce7',
+            color: '#15803d',
+            borderRadius: '8px',
+            marginBottom: '1.5rem' 
+          }}>
+            <span>{success}</span>
+          </div>
+        )}
+        
+        <div className="card" style={{ 
+          background: 'white', 
+          borderRadius: '12px', 
+          padding: '1.5rem', 
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)', 
+          marginBottom: '1.5rem' 
+        }}>
+          <div className="card-header" style={{ 
+            borderBottom: '1px solid #e5e7eb',
+            paddingBottom: '1rem',
+            marginBottom: '1.5rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <h2>All Locations</h2>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <button onClick={handleRefresh} style={{ 
+                padding: '0.5rem', 
+                background: '#f3f4f6', 
+                border: '1px solid #d1d5db', 
+                borderRadius: '6px', 
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }} title="Refresh List">🔄</button>
+              <button onClick={() => navigate('/company-admin/location-creation')} style={{ 
+                padding: '0.5rem 1rem', 
+                background: '#4f46e5', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '6px', 
+                cursor: 'pointer', 
+                fontWeight: '500' 
+              }}>+ Add New</button>
+            </div>
+          </div>
+          
+          {loading ? (
             <div style={{ 
               display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              marginBottom: '1.5rem'
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              padding: '2rem', 
+              color: '#6b7280' 
             }}>
-              <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '600' }}>
-                Edit Location
-              </h3>
-              <button 
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingLocation(null);
-                  setError('');
-                }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  color: '#6b7280'
-                }}
-              >
-                ×
-              </button>
-            </div>
-            
-            <form onSubmit={handleSaveEdit}>
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ 
-                  display: 'block', 
-                  marginBottom: '0.5rem', 
-                  fontWeight: '500' 
-                }}>
-                  Location Name *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={editForm.name}
-                  onChange={handleEditInputChange}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    fontSize: '1rem',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-              
               <div style={{ 
-                display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: '0.75rem',
-                marginTop: '1.5rem'
-              }}>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingLocation(null);
-                    setError('');
-                  }}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    background: '#f3f4f6',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={saving}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    background: saving ? '#94a3b8' : '#4f46e5',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: saving ? 'not-allowed' : 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
+                width: '20px', 
+                height: '20px', 
+                borderRadius: '50%', 
+                border: '2px solid #e5e7eb', 
+                borderTopColor: '#6366f1', 
+                animation: 'spin 1s linear infinite', 
+                marginRight: '0.75rem' 
+              }}></div>
+              Loading locations...
+            </div>
+          ) : locations.length === 0 ? (
+            <div style={{ 
+              padding: '2rem', 
+              textAlign: 'center', 
+              color: '#6b7280', 
+              border: '1px dashed #d1d5db', 
+              borderRadius: '8px' 
+            }}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📍</div>
+              <p style={{ marginBottom: '1rem' }}>No locations found.</p>
+              <p>Create your first location to get started.</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', verticalAlign: 'middle' }}>Name</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', verticalAlign: 'middle' }}>Created At</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left', verticalAlign: 'middle' }}>Updated At</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'center', verticalAlign: 'middle' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {locations.map(location => (
+                    <tr key={location.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '0.75rem', verticalAlign: 'middle' }}>{location.name}</td>
+                      <td style={{ padding: '0.75rem', verticalAlign: 'middle' }}>{location.createdAt ? new Date(location.createdAt).toLocaleString() : 'N/A'}</td>
+                      <td style={{ padding: '0.75rem', verticalAlign: 'middle' }}>{location.updatedAt && location.createdAt !== location.updatedAt ? new Date(location.updatedAt).toLocaleString() : '-'}</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                          <button onClick={() => handleEdit(location)} style={{ 
+                            padding: '0.5rem 0.75rem', 
+                            background: '#4f46e5', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: '4px', 
+                            cursor: 'pointer' 
+                          }}>Edit</button>
+                          <button onClick={() => handleDelete(location)} style={{ 
+                            padding: '0.5rem 0.75rem', 
+                            background: '#ef4444', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: '4px', 
+                            cursor: 'pointer' 
+                          }}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      )}
+        
+        {showEditModal && (
+          <div className="modal-overlay" style={{ 
+            position: 'fixed', 
+            top: 0, 
+            left: 0, 
+            right: 0, 
+            bottom: 0, 
+            backgroundColor: 'rgba(0, 0, 0, 0.5)', 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            zIndex: 1000 
+          }}>
+            <div className="modal-content" style={{ 
+              backgroundColor: 'white', 
+              borderRadius: '8px', 
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', 
+              width: '90%', 
+              maxWidth: '500px', 
+              padding: '0', 
+              position: 'relative', 
+              maxHeight: '90vh', 
+              overflow: 'auto' 
+            }}>
+              <div className="modal-header" style={{ 
+                padding: '1rem 1.5rem', 
+                borderBottom: '1px solid #e5e7eb', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center' 
+              }}>
+                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Edit Location</h2>
+                <button onClick={() => setShowEditModal(false)} style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  fontSize: '1.5rem', 
+                  cursor: 'pointer', 
+                  color: '#6b7280' 
+                }}>×</button>
+              </div>
+              <div style={{ padding: '1.5rem' }}>
+                <form onSubmit={handleSaveEdit}>
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <label htmlFor="name" style={{ 
+                      display: 'block', 
+                      marginBottom: '0.5rem', 
+                      fontWeight: '500', 
+                      color: '#374151' 
+                    }}>Location Name *</label>
+                    <input 
+                      type="text" 
+                      id="name" 
+                      name="name" 
+                      value={editForm.name} 
+                      onChange={handleEditInputChange} 
+                      required 
+                      placeholder="Enter location name" 
+                      style={{ 
+                        width: '100%', 
+                        padding: '0.75rem 1rem', 
+                        border: '1px solid #d1d5db', 
+                        borderRadius: '8px', 
+                        fontSize: '1rem', 
+                        boxSizing: 'border-box' 
+                      }} 
+                    />
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'flex-end', 
+                    gap: '0.75rem', 
+                    marginTop: '1.5rem', 
+                    paddingTop: '1.25rem', 
+                    borderTop: '1px solid #e5e7eb' 
+                  }}>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowEditModal(false)} 
+                      style={{ 
+                        padding: '0.75rem 1.25rem', 
+                        background: '#f3f4f6', 
+                        border: '1px solid #d1d5db', 
+                        borderRadius: '8px', 
+                        fontWeight: '500', 
+                        cursor: 'pointer' 
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      disabled={saving || !editForm.name.trim()} 
+                      style={{ 
+                        padding: '0.75rem 1.5rem', 
+                        background: saving ? '#94a3b8' : '#4f46e5', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '8px', 
+                        fontWeight: '500', 
+                        cursor: saving ? 'not-allowed' : 'pointer' 
+                      }}
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

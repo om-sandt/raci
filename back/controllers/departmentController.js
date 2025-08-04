@@ -3,11 +3,11 @@ const logger = require('../utils/logger');
 
 // @desc    Create a new department
 // @route   POST /api/companies/:companyId/departments
-// @access  Private (company_admin)
+// @access  Private (company_admin, website_admin)
 exports.createDepartment = async (req, res, next) => {
   try {
     const { companyId } = req.params;
-    const { name, hodId } = req.body;
+    const { name, hodId, departmentSize, location, division, function: departmentFunction } = req.body;
     
     logger.debug(`Creating department with name: ${name} for company ID: ${companyId}`);
 
@@ -47,12 +47,12 @@ exports.createDepartment = async (req, res, next) => {
       }
     }
 
-    // Create department (hodId is optional)
+    // Create department with new fields
     const result = await db.query(
-      `INSERT INTO departments (name, hod_id, company_id)
-      VALUES ($1, $2, $3)
-      RETURNING department_id, name, hod_id, company_id, created_at`,
-      [name, hodId || null, companyId]
+      `INSERT INTO departments (name, hod_id, company_id, department_size, location, division, function)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING department_id, name, hod_id, company_id, department_size, location, division, function, created_at`,
+      [name, hodId || null, companyId, departmentSize || null, location || null, division || null, departmentFunction || null]
     );
 
     const department = result.rows[0];
@@ -89,6 +89,10 @@ exports.createDepartment = async (req, res, next) => {
     res.status(201).json({
       id: department.department_id,
       name: department.name,
+      departmentSize: department.department_size,
+      location: department.location,
+      division: department.division,
+      function: department.function,
       hod,
       company,
       createdAt: department.created_at
@@ -108,14 +112,14 @@ exports.getAllDepartments = async (req, res, next) => {
 
     // Get departments with HOD and employee count
     const { rows } = await db.query(
-      `SELECT d.department_id, d.name, d.hod_id, d.created_at, d.updated_at,
+      `SELECT d.department_id, d.name, d.department_size, d.location, d.division, d.function, d.hod_id, d.created_at, d.updated_at,
       u.full_name as hod_name,
       COUNT(e.user_id) FILTER (WHERE e.role = 'user') as employees_count
       FROM departments d
       LEFT JOIN users u ON d.hod_id = u.user_id
       LEFT JOIN users e ON d.department_id = e.department_id
       WHERE d.company_id = $1
-      GROUP BY d.department_id, u.full_name
+      GROUP BY d.department_id, u.full_name, d.department_size, d.location, d.division, d.function
       ORDER BY d.name`,
       [companyId]
     );
@@ -124,6 +128,10 @@ exports.getAllDepartments = async (req, res, next) => {
     const departments = rows.map(dept => ({
       id: dept.department_id,
       name: dept.name,
+      departmentSize: dept.department_size,
+      location: dept.location,
+      division: dept.division,
+      function: dept.function,
       hod: dept.hod_id ? {
         id: dept.hod_id,
         name: dept.hod_name
@@ -148,7 +156,7 @@ exports.getDepartmentById = async (req, res, next) => {
 
     // Get department details
     const departmentResult = await db.query(
-      `SELECT d.department_id, d.name, d.hod_id, d.company_id,
+      `SELECT d.department_id, d.name, d.department_size, d.location, d.division, d.function, d.hod_id, d.company_id,
       u.full_name as hod_name, u.email as hod_email,
       c.name as company_name,
       d.created_at, d.updated_at
@@ -187,6 +195,10 @@ exports.getDepartmentById = async (req, res, next) => {
     res.status(200).json({
       id: department.department_id,
       name: department.name,
+      departmentSize: department.department_size,
+      location: department.location,
+      division: department.division,
+      function: department.function,
       hod: department.hod_id ? {
         id: department.hod_id,
         name: department.hod_name,
@@ -207,11 +219,11 @@ exports.getDepartmentById = async (req, res, next) => {
 
 // @desc    Update department
 // @route   PUT /api/departments/:id
-// @access  Private (company-admin)
+// @access  Private (company-admin, website-admin)
 exports.updateDepartment = async (req, res, next) => {
   try {
     const departmentId = req.params.id;
-    const { name, hodId } = req.body;
+    const { name, hodId, departmentSize, location, division, function: departmentFunction } = req.body;
 
     // Check if department exists
     const departmentCheck = await db.query(
@@ -248,10 +260,14 @@ exports.updateDepartment = async (req, res, next) => {
       `UPDATE departments
       SET name = COALESCE($1, name),
           hod_id = COALESCE($2, hod_id),
+          department_size = COALESCE($3, department_size),
+          location = COALESCE($4, location),
+          division = COALESCE($5, division),
+          function = COALESCE($6, function),
           updated_at = CURRENT_TIMESTAMP
-      WHERE department_id = $3
-      RETURNING department_id, name, hod_id, company_id, created_at, updated_at`,
-      [name, hodId, departmentId]
+      WHERE department_id = $7
+      RETURNING department_id, name, department_size, location, division, function, hod_id, company_id, created_at, updated_at`,
+      [name, hodId, departmentSize, location, division, departmentFunction, departmentId]
     );
 
     const department = result.rows[0];
@@ -302,6 +318,10 @@ exports.updateDepartment = async (req, res, next) => {
     res.status(200).json({
       id: department.department_id,
       name: department.name,
+      departmentSize: department.department_size,
+      location: department.location,
+      division: department.division,
+      function: department.function,
       hod,
       company,
       employees,
@@ -315,7 +335,7 @@ exports.updateDepartment = async (req, res, next) => {
 
 // @desc    Delete department
 // @route   DELETE /api/departments/:id
-// @access  Private (company-admin)
+// @access  Private (company-admin, website-admin)
 exports.deleteDepartment = async (req, res, next) => {
   try {
     const departmentId = req.params.id;

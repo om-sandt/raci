@@ -29,13 +29,73 @@ app.use(express.urlencoded({ extended: true }));
 // Setup request logger - must be after body parsers but before routes
 app.use(requestLogger);
 
-// Set static folder for uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 // Create uploads directory if it doesn't exist
 if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
   fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
 }
+
+// Route to serve S3 files through /uploads/ path (must come before static route)
+app.get('/uploads/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    
+    // Check if file exists locally first
+    const localPath = path.join(__dirname, 'uploads', filename);
+    if (fs.existsSync(localPath)) {
+      return res.sendFile(localPath);
+    }
+    
+    // If not found locally, try to find it in S3
+    const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+    const s3Client = new S3Client({
+      region: process.env.AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      }
+    });
+    
+    // Search for the file in S3 by filename
+    // We'll need to list objects and find the one with matching filename
+    const { ListObjectsV2Command } = require('@aws-sdk/client-s3');
+    const listCommand = new ListObjectsV2Command({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Prefix: 'raci/'
+    });
+    
+    const listResult = await s3Client.send(listCommand);
+    const fileKey = listResult.Contents?.find(obj => 
+      obj.Key && obj.Key.split('/').pop() === filename
+    )?.Key;
+    
+    if (!fileKey) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    
+    // Get the file from S3 and stream it
+    const getCommand = new GetObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: fileKey
+    });
+    
+    const s3Response = await s3Client.send(getCommand);
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', s3Response.ContentType || 'application/octet-stream');
+    res.setHeader('Content-Length', s3Response.ContentLength);
+    res.setHeader('Cache-Control', 'public, max-age=31536000'); // Cache for 1 year
+    
+    // Stream the file
+    s3Response.Body.pipe(res);
+    
+  } catch (error) {
+    console.error('Error serving file from S3:', error);
+    res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
+// Set static folder for uploads (fallback for local files)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Mount routers
 const mountRouter = (path, router) => {
@@ -58,6 +118,7 @@ mountRouter('/api/hod', require('./routes/hod'));
 mountRouter('/api/designations', require('./routes/designations'));
 mountRouter('/api/locations', require('./routes/locations'));
 mountRouter('/api/raci-tracker', require('./routes/raciTracker'));
+mountRouter('/api/divisions', require('./routes/divisions'));
 
 // Basic route with CORS
 app.get('/', (req, res) => {

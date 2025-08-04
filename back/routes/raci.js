@@ -14,7 +14,10 @@ const {
   getRaciApprovalStatus,
   refreshRaciApprovalStatus,
   getEligibleApprovers,
-  getMyApprovalHistory
+  getMyApprovalHistory,
+  getEligibleEventsForRaci,
+  getAllApprovedEventsForRaci,
+  getApprovedEventsForDropdown
 } = require('../controllers/raciController');
 
 const router = express.Router();
@@ -76,6 +79,21 @@ router
 router
   .route('/eligible-approvers')
   .get(authorize('company_admin', 'hod'), getEligibleApprovers);
+
+// Get events eligible for RACI matrix creation
+router
+  .route('/eligible-events')
+  .get(authorize('company_admin', 'hod'), getEligibleEventsForRaci);
+
+// Get all approved events for RACI matrix creation
+router
+  .route('/all-approved-events')
+  .get(authorize('company_admin', 'hod'), getAllApprovedEventsForRaci);
+
+// Get approved events for dropdown selection
+router
+  .route('/events-dropdown')
+  .get(authorize('company_admin', 'hod'), getApprovedEventsForDropdown);
 
 module.exports = router;
    

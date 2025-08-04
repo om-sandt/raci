@@ -10,6 +10,10 @@ const RACIDashboard = () => {
   const [error, setError] = useState(null);
   const [userData, setUserData] = useState(null);
   const [departmentData, setDepartmentData] = useState(null);
+
+  const handleBackToDashboard = () => {
+    navigate('/user/raci-dashboard');
+  };
   
   // Fetch user's RACI assignments from the API
   useEffect(() => {
@@ -287,10 +291,10 @@ const RACIDashboard = () => {
   };
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>RACI Dashboard</h1>
-        <p>View and track your RACI assignments</p>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
+      <div className="page-header" style={{ position: 'relative', marginBottom: '2rem' }}>
+        <h1 style={{ textAlign: 'center', margin: 0 }}>RACI Dashboard</h1>
+        <p style={{ textAlign: 'center', margin: '0.5rem 0 0 0' }}>View and track your RACI assignments</p>
         
         {/* Display user/department information if available */}
         {userData && departmentData && (
@@ -300,7 +304,8 @@ const RACIDashboard = () => {
             backgroundColor: '#f8fafc',
             borderRadius: '8px',
             fontSize: '0.875rem',
-            color: '#64748b'
+            color: '#64748b',
+            textAlign: 'center'
           }}>
             <span>{userData.name} • {departmentData.name} Department</span>
           </div>
@@ -377,7 +382,6 @@ const RACIDashboard = () => {
                       <th>Status</th>
                       <th>Due Date</th>
                       <th>Financial Limit</th>
-                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -417,13 +421,7 @@ const RACIDashboard = () => {
                           )}
                         </td>
                         <td>
-                          <button 
-                            className="btn btn-secondary"
-                            style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-                            onClick={() => handleViewDetails(assignment)}
-                          >
-                            View Details
-                          </button>
+                          {/* View button removed - view only */}
                         </td>
                       </tr>
                     ))}

@@ -25,7 +25,7 @@ companyDepartmentsRouter.use(protect);
 companyDepartmentsRouter
   .route('/')
   .get(checkCompanyMember, getAllDepartments)
-  .post(authorize('company_admin'), checkCompanyMember, createDepartment);
+  .post(authorize('company_admin', 'website_admin'), checkCompanyMember, createDepartment);
 
 // Router for departments
 const departmentRouter = express.Router();
@@ -43,8 +43,8 @@ departmentRouter.use(protect);
 departmentRouter
   .route('/:id')
   .get(getDepartmentById)
-  .put(authorize('company_admin'), updateDepartment)
-  .delete(authorize('company_admin'), deleteDepartment);
+  .put(authorize('company_admin', 'website_admin'), updateDepartment)
+  .delete(authorize('company_admin', 'website_admin'), deleteDepartment);
 
 module.exports = { 
   companyDepartmentsRouter,

@@ -18,6 +18,10 @@ model WebsiteAdmin {
   canCreateAdmins Boolean  @default(false) @map("can_create_admins")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+  
+  // Relations
+  requestedDeletions CompanyDeletionRequest[] @relation("RequestedBy")
+  approvedDeletions  CompanyDeletionRequest[] @relation("ApprovedBy")
 
   @@map("website_admins")
 }
@@ -29,12 +33,36 @@ model Company {
   domain     String?
   industry   String?
   size       String?
+  panId      String?      @map("pan_id")
+  projectName String?     @map("project_name")
+  projectLogo String?     @map("project_logo")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @default(now()) @updatedAt @map("updated_at")
   users      User[]
   departments Department[]
+  divisions  Division[]
+  deletionRequests CompanyDeletionRequest[]
 
   @@map("companies")
+}
+
+model CompanyDeletionRequest {
+  id          Int           @id @default(autoincrement()) @map("request_id")
+  status      String        @default("pending")
+  reason      String?
+  processedAt DateTime?     @map("processed_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+  
+  // Relations
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId   Int           @map("company_id")
+  requestedBy WebsiteAdmin? @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedById Int?        @map("requested_by")
+  approver    WebsiteAdmin? @relation("ApprovedBy", fields: [approverId], references: [id], onDelete: SetNull)
+  approverId  Int?          @map("approver_id")
+
+  @@map("company_deletion_requests")
 }
 
 model User {
@@ -47,6 +75,13 @@ model User {
   employeeId     String?          @map("employee_id")
   role           Role
   approvalAssign Boolean          @default(false) @map("approval_assign")
+  isDefaultPassword Boolean       @default(true) @map("is_default_password")
+  otp            String?
+  photo          String?
+  location       String?
+  divisionName   String?         @map("division")
+  dob            String?
+  doj            String?
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at")
   
@@ -55,6 +90,8 @@ model User {
   companyId       Int?             @map("company_id")
   department      Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   departmentId    Int?             @map("department_id")
+  divisionId      Int?             @map("division_id")
+  division        Division?        @relation(fields: [divisionId], references: [id], onDelete: SetNull)
   
   // Relations where User is referenced
   departmentsLed  Department[]     @relation("DepartmentHOD")
@@ -71,6 +108,10 @@ model User {
 model Department {
   id        Int       @id @default(autoincrement()) @map("department_id")
   name      String
+  departmentSize String? @map("department_size")
+  location  String?
+  division  String?
+  function  String?
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @default(now()) @updatedAt @map("updated_at")
   
@@ -91,8 +132,10 @@ model Event {
   id               Int             @id @default(autoincrement()) @map("event_id")
   name             String
   description      String?
+  division         String?
   priority         String?         @map("priority")
   eventType        String?         @map("event_type")
+  kpi              String?         @map("kpi")
   documentPath     String?         @map("document_path")
   approvalStatus   ApprovalStatus  @default(PENDING) @map("approval_status")
   rejectionReason  String?         @map("rejection_reason")
@@ -226,6 +269,7 @@ enum RaciType {
 model Designation {
   id        Int      @id @default(autoincrement()) @map("designation_id")
   name      String
+  companyId Int?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -235,6 +279,7 @@ model Designation {
 model Location {
   id        Int      @id @default(autoincrement()) @map("location_id")
   name      String
+  companyId Int?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -245,4 +290,16 @@ enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+model Division {
+  id        Int      @id @default(autoincrement()) @map("division_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId Int?     @map("company_id")
+  users     User[]
+
+  @@map("divisions")
 }

@@ -202,7 +202,7 @@ exports.getDepartmentDetails = async (req, res, next) => {
       SELECT e.event_id, e.name, e.created_at, u.full_name as created_by_name
       FROM events e
       JOIN users u ON e.created_by = u.user_id
-      WHERE e.department_id = $1 AND e.approval_status = 'pending'
+      WHERE e.department_id = $1 AND e.approval_status = 'PENDING'
       ORDER BY e.created_at ASC
     `;
     

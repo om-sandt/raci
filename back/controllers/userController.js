@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
+const logger = require('../utils/logger');
+const { generateS3Url, deleteFileFromS3, extractS3Key } = require('../utils/s3Utils');
 
 // @desc    Create a new user
 // @route   POST /api/users
@@ -13,11 +15,14 @@ exports.createUser = async (req, res, next) => {
       email,
       role,
       designation,
+      division,
       phone,
       employeeId,
       departmentId,
       companyId,
-      location
+      location,
+      dob, // <-- added
+      doj  // <-- added
     } = req.body;
 
     // Validate inputs
@@ -72,16 +77,16 @@ exports.createUser = async (req, res, next) => {
     // Handle photo upload if provided (for company_admin)
     let photoUrl = null;
     if (req.file && role === 'company_admin') {
-      photoUrl = `/uploads/${req.file.filename}`;
+      photoUrl = req.file.key;
     }
 
     // Insert new user
     const result = await db.query(
-      `INSERT INTO users (full_name, email, password, role, designation, phone, 
-        employee_id, department_id, company_id, photo, location)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING user_id, full_name, email, role, designation, phone, employee_id, department_id, company_id, photo, location, created_at, updated_at`,
-      [name, email, hashedPassword, role, designation, phone, employeeId, departmentId, companyId, photoUrl, location]
+      `INSERT INTO users (full_name, email, password, role, designation, division, phone, 
+        employee_id, department_id, company_id, photo, location, dob, doj)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING user_id, full_name, email, role, designation, division, phone, employee_id, department_id, company_id, photo, location, dob, doj, created_at, updated_at`,
+      [name, email, hashedPassword, role, designation, division, phone, employeeId, departmentId, companyId, photoUrl, location, dob, doj]
     );
 
     const user = result.rows[0];
@@ -126,10 +131,13 @@ exports.createUser = async (req, res, next) => {
       email: user.email,
       role: user.role,
       designation: user.designation,
+      division: user.division,
       phone: user.phone,
       employeeId: user.employee_id,
-      photo: user.photo,
+      photo: generateS3Url(user.photo),
       location: user.location,
+      dob: user.dob, // <-- added
+      doj: user.doj, // <-- added
       department,
       company,
       status: 'pending',
@@ -158,9 +166,9 @@ exports.getUsers = async (req, res, next) => {
     } = req.query;
 
     // Build query based on filters
-    let query = `SELECT u.user_id, u.full_name, u.email, u.role, u.designation, 
+    let query = `SELECT u.user_id, u.full_name, u.email, u.role, u.designation, u.division,
                 u.phone, u.employee_id, u.photo, u.department_id, d.name as department_name, 
-                u.company_id, c.name as company_name, u.created_at, u.updated_at, u.location
+                u.company_id, c.name as company_name, u.created_at, u.updated_at, u.location, u.dob, u.doj
                 FROM users u
                 LEFT JOIN departments d ON u.department_id = d.department_id
                 LEFT JOIN companies c ON u.company_id = c.company_id
@@ -223,10 +231,13 @@ exports.getUsers = async (req, res, next) => {
       email: user.email,
       role: user.role,
       designation: user.designation,
+      division: user.division,
       phone: user.phone,
       employeeId: user.employee_id,
-      photo: user.photo,
+      photo: generateS3Url(user.photo),
       location: user.location,
+      dob: user.dob, // <-- added
+      doj: user.doj, // <-- added
       department: user.department_id ? {
         id: user.department_id,
         name: user.department_name
@@ -262,7 +273,7 @@ exports.getUserById = async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT u.user_id, u.full_name, u.email, u.phone, u.role, 
-      u.designation, u.employee_id, u.company_id, u.department_id, u.photo, u.location,
+      u.designation, u.division, u.employee_id, u.company_id, u.department_id, u.photo, u.location, u.dob, u.doj,
       u.created_at, u.updated_at,
       c.name as company_name, d.name as department_name
       FROM users u
@@ -287,10 +298,13 @@ exports.getUserById = async (req, res, next) => {
       email: user.email,
       role: user.role,
       designation: user.designation,
+      division: user.division,
       phone: user.phone,
       employeeId: user.employee_id,
-      photo: user.photo,
+      photo: generateS3Url(user.photo),
       location: user.location,
+      dob: user.dob, // <-- added
+      doj: user.doj, // <-- added
       department: user.department_id ? {
         id: user.department_id,
         name: user.department_name
@@ -314,7 +328,7 @@ exports.getUserById = async (req, res, next) => {
 exports.updateUser = async (req, res, next) => {
   try {
     const userId = req.params.id;
-    const { name, designation, phone, departmentId, location } = req.body;
+    const { name, designation, division, phone, departmentId, location, dob, doj } = req.body;
 
     // Check if user exists
     const userCheck = await db.query('SELECT * FROM users WHERE user_id = $1', [userId]);
@@ -341,14 +355,18 @@ exports.updateUser = async (req, res, next) => {
     // Handle photo upload if provided (for company_admin)
     let photoUrl = userCheck.rows[0].photo;
     if (req.file && userCheck.rows[0].role === 'company_admin') {
-      // If user already has a photo, remove the old one
+      // If user already has a photo, remove the old one from S3
       if (photoUrl) {
-        const oldPhotoPath = path.join(__dirname, '..', photoUrl);
-        if (fs.existsSync(oldPhotoPath)) {
-          fs.unlinkSync(oldPhotoPath);
+        try {
+          const s3Key = extractS3Key(photoUrl);
+          if (s3Key) {
+            await deleteFileFromS3(s3Key);
+          }
+        } catch (error) {
+          console.error('Error deleting old photo from S3:', error);
         }
       }
-      photoUrl = `/uploads/${req.file.filename}`;
+      photoUrl = req.file.key;
     }
 
     // Update user
@@ -356,14 +374,17 @@ exports.updateUser = async (req, res, next) => {
       `UPDATE users
        SET full_name = COALESCE($1, full_name),
            designation = COALESCE($2, designation),
-           phone = COALESCE($3, phone),
-           department_id = COALESCE($4, department_id),
-           photo = COALESCE($5, photo),
-           location = COALESCE($6, location),
+           division = COALESCE($3, division),
+           phone = COALESCE($4, phone),
+           department_id = COALESCE($5, department_id),
+           photo = COALESCE($6, photo),
+           location = COALESCE($7, location),
+           dob = COALESCE($8, dob),
+           doj = COALESCE($9, doj),
            updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $7
-       RETURNING user_id, full_name, email, role, designation, phone, employee_id, department_id, company_id, photo, location, created_at, updated_at`,
-      [name, designation, phone, departmentId, photoUrl, location, userId]
+       WHERE user_id = $10
+       RETURNING user_id, full_name, email, role, designation, division, phone, employee_id, department_id, company_id, photo, location, dob, doj, created_at, updated_at`,
+      [name, designation, division, phone, departmentId, photoUrl, location, dob, doj, userId]
     );
 
     const user = result.rows[0];
@@ -405,10 +426,13 @@ exports.updateUser = async (req, res, next) => {
       email: user.email,
       role: user.role,
       designation: user.designation,
+      division: user.division,
       phone: user.phone,
       employeeId: user.employee_id,
-      photo: user.photo,
+      photo: generateS3Url(user.photo),
       location: user.location,
+      dob: user.dob, // <-- added
+      doj: user.doj, // <-- added
       department,
       company,
       status: 'active',

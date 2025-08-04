@@ -14,6 +14,7 @@
 - [Meeting Management](#meeting-management)
 - [Reference Data Management](#reference-data-management)
 - [Dashboard & Analytics](#dashboard--analytics)
+- [Division Management](#division-management)
 
 ## Overview
 
@@ -486,12 +487,15 @@ const grantPermission = async (adminId, canCreate) => {
   - `email` (string, required)
   - `role` (string, required) – one of `user`, `company_admin`, or `hod`
   - `designation` (string) – **required when `role` is `company_admin`**
+  - `division` (string) – business unit or division
   - `phone` (string)
   - `employeeId` (string)
   - `departmentId` (integer) – required for `role=hod`
   - `companyId` (integer)
   - `location` (string)
   - `photo` (file) – **required when `role` is `company_admin`**; ignored for other roles
+  - `dob` (string, optional) – date of birth (YYYY-MM-DD)
+  - `doj` (string, optional) – date of joining (YYYY-MM-DD)
 
 - **Example: Creating a Company Admin (form-data key → value)**
   ```
@@ -499,11 +503,14 @@ const grantPermission = async (adminId, canCreate) => {
   email       → alice@acme.com
   role        → company_admin
   designation → Operations Manager
+  division    → Operations
   phone       → +14155550123
   employeeId  → ACME-ADM-01
   companyId   → 1
   location    → San Francisco, USA
   photo       → (file) alice_profile.jpg
+  dob         → 1990-01-01
+  doj         → 2022-06-15
   ```
 
 - **Success Response**:
@@ -514,6 +521,7 @@ const grantPermission = async (adminId, canCreate) => {
     "email": "alice@acme.com",
     "role": "company_admin",
     "designation": "Operations Manager",
+    "division": "Operations",
     "phone": "+14155550123",
     "employeeId": "ACME-ADM-01",
     "photo": "/uploads/alice_profile.jpg",
@@ -526,7 +534,9 @@ const grantPermission = async (adminId, canCreate) => {
     "status": "pending",
     "tempPassword": "random-password",
     "createdAt": "2023-01-01T00:00:00Z",
-    "updatedAt": "2023-01-01T00:00:00Z"
+    "updatedAt": "2023-01-01T00:00:00Z",
+    "dob": "1990-01-01",
+    "doj": "2022-06-15"
   }
   ```
 
@@ -555,6 +565,7 @@ const grantPermission = async (adminId, canCreate) => {
         "email": "user@example.com",
         "role": "user|company_admin|hod",
         "designation": "Job Title",
+        "division": "Engineering",
         "phone": "+1234567890",
         "employeeId": "EMP123",
         "photo": "/uploads/profile-photo.jpg",
@@ -569,7 +580,9 @@ const grantPermission = async (adminId, canCreate) => {
         },
         "status": "active",
         "createdAt": "2023-01-01T00:00:00Z",
-        "updatedAt": "2023-01-02T00:00:00Z"
+        "updatedAt": "2023-01-02T00:00:00Z",
+        "dob": "1990-01-01",
+        "doj": "2022-06-15"
       }
     ]
   }
@@ -589,6 +602,7 @@ const grantPermission = async (adminId, canCreate) => {
     "email": "user@example.com",
     "role": "user|company_admin|hod",
     "designation": "Job Title",
+    "division": "Engineering",
     "phone": "+1234567890",
     "employeeId": "EMP123",
     "photo": "/uploads/profile-photo.jpg",
@@ -603,7 +617,9 @@ const grantPermission = async (adminId, canCreate) => {
     },
     "status": "active",
     "createdAt": "2023-01-01T00:00:00Z",
-    "updatedAt": "2023-01-02T00:00:00Z"
+    "updatedAt": "2023-01-02T00:00:00Z",
+    "dob": "1990-01-01",
+    "doj": "2022-06-15"
   }
   ```
 
@@ -619,6 +635,7 @@ const grantPermission = async (adminId, canCreate) => {
   {
     "name": "Updated Name",
     "designation": "Updated Title",
+    "division": "Operations",
     "phone": "+1234567890",
     "departmentId": 1,
     "location": "San Francisco, USA",
@@ -633,6 +650,7 @@ const grantPermission = async (adminId, canCreate) => {
     "email": "user@example.com",
     "role": "user|company_admin|hod",
     "designation": "Updated Title",
+    "division": "Operations",
     "phone": "+1234567890",
     "employeeId": "EMP123",
     "photo": "/uploads/profile-photo.jpg",
@@ -647,7 +665,9 @@ const grantPermission = async (adminId, canCreate) => {
     },
     "status": "active",
     "createdAt": "2023-01-01T00:00:00Z",
-    "updatedAt": "2023-01-02T14:30:00Z"
+    "updatedAt": "2023-01-02T14:30:00Z",
+    "dob": "1990-01-01",
+    "doj": "2022-06-15"
   }
   ```
 
@@ -997,9 +1017,11 @@ const grantPermission = async (adminId, canCreate) => {
   {
     "name": "Event Name",
     "description": "Event Description",
+    "division": "Engineering",
     "departmentId": 1,
     "priority": "high",
     "eventType": "webinar",
+    "kpi": "Key Performance Indicators for this event",
     "document": File (optional),
     "employees": [1, 2, 3],
     "tasks": [
@@ -1021,8 +1043,10 @@ const grantPermission = async (adminId, canCreate) => {
     "id": 1,
     "name": "Event Name",
     "description": "Event Description",
+    "division": "Engineering",
     "priority": "high",
     "eventType": "webinar",
+    "kpi": "Key Performance Indicators for this event",
     "department": {
       "id": 1,
       "name": "Department Name"
@@ -1084,8 +1108,10 @@ const grantPermission = async (adminId, canCreate) => {
       {
         "id": 1,
         "name": "Event Name",
+        "division": "Engineering",
         "priority": "high",
         "eventType": "webinar",
+        "kpi": "Key Performance Indicators for this event",
         "department": {
           "id": 1,
           "name": "Department Name"
@@ -1103,7 +1129,53 @@ const grantPermission = async (adminId, canCreate) => {
 - **Method**: `GET`
 - **Auth required**: Yes (company member)
 - **Description**: Get details of a specific event
-- **Success Response**: Full event object with details
+- **Success Response**: 
+  ```json
+  {
+    "id": 1,
+    "name": "Event Name",
+    "description": "Event Description",
+    "division": "Engineering",
+    "priority": "high",
+    "eventType": "webinar",
+    "kpi": "Key Performance Indicators for this event",
+    "department": {
+      "id": 1,
+      "name": "Department Name"
+    },
+    "hod": {
+      "id": 1,
+      "name": "HOD Name"
+    },
+    "creator": {
+      "name": "Creator Name"
+    },
+    "documents": [
+      {
+        "id": 1,
+        "name": "document.pdf",
+        "url": "/uploads/document-filename.pdf"
+      }
+    ],
+    "employees": [
+      {
+        "id": 1,
+        "name": "Employee Name"
+      }
+    ],
+    "tasks": [
+      {
+        "id": 1,
+        "name": "Task 1",
+        "description": "Description of Task 1",
+        "status": "not_started"
+      }
+    ],
+    "status": "pending|approved|rejected",
+    "rejectionReason": null,
+    "createdAt": "2023-01-01T00:00:00Z"
+  }
+  ```
 
 ### Update Event
 
@@ -1111,8 +1183,21 @@ const grantPermission = async (adminId, canCreate) => {
 - **Method**: `PUT`
 - **Auth required**: Yes (event creator, company_admin or HOD)
 - **Description**: Update event details
-- **Request Body**: Same as create event
-- **Success Response**: Updated event object
+- **Request Body**: Same as create event (including division field)
+- **Example Request Body**:
+  ```json
+  {
+    "name": "Updated Event Name",
+    "description": "Updated Event Description",
+    "division": "Operations",
+    "departmentId": 1,
+    "priority": "medium",
+    "eventType": "meeting",
+    "kpi": "Updated Key Performance Indicators for this event",
+    "employees": [1, 2, 3]
+  }
+  ```
+- **Success Response**: Updated event object with division field included
 
 ### Delete Event
 
@@ -1254,6 +1339,7 @@ const grantPermission = async (adminId, canCreate) => {
   {
     "eventId": 1,
     "name": "Event Name",
+    "division": "Engineering",
     "department": {
       "id": 1,
       "name": "Department Name"
@@ -1574,6 +1660,7 @@ const grantPermission = async (adminId, canCreate) => {
     "eventId": 1,
     "name": "Project Alpha Launch",
     "description": "Launch of Project Alpha",
+    "division": "Engineering",
     "department": {
       "id": 1,
       "name": "Engineering"
@@ -2720,5 +2807,112 @@ Used to populate the location dropdown in the user creation form.
         "createdAt": "2023-01-01T00:00:00Z"
       }
     ]
+  }
+  ```
+
+## Division Management
+
+### Create Division
+- **URL**: `/divisions`
+- **Method**: `POST`
+- **Auth required**: Yes (company_admin)
+- **Description**: Create a new division for the authenticated company
+- **Request Body**:
+  ```json
+  {
+    "name": "Engineering"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 1,
+      "name": "Engineering",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+### Get All Divisions
+- **URL**: `/divisions`
+- **Method**: `GET`
+- **Auth required**: Yes (company_admin)
+- **Description**: Get all divisions for the authenticated company
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": 1,
+        "name": "Engineering",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      },
+      {
+        "id": 2,
+        "name": "Operations",
+        "createdAt": "2023-01-01T00:00:00Z",
+        "updatedAt": "2023-01-01T00:00:00Z"
+      }
+    ]
+  }
+  ```
+
+### Get Division by ID
+- **URL**: `/divisions/{id}`
+- **Method**: `GET`
+- **Auth required**: Yes (company_admin)
+- **Description**: Get details of a specific division by ID
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 1,
+      "name": "Engineering",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-01T00:00:00Z"
+    }
+  }
+  ```
+
+### Update Division
+- **URL**: `/divisions/{id}`
+- **Method**: `PUT`
+- **Auth required**: Yes (company_admin)
+- **Description**: Update the name of a division
+- **Request Body**:
+  ```json
+  {
+    "name": "New Division Name"
+  }
+  ```
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": 1,
+      "name": "New Division Name",
+      "createdAt": "2023-01-01T00:00:00Z",
+      "updatedAt": "2023-01-02T00:00:00Z"
+    }
+  }
+  ```
+
+### Delete Division
+- **URL**: `/divisions/{id}`
+- **Method**: `DELETE`
+- **Auth required**: Yes (company_admin)
+- **Description**: Delete a division by ID
+- **Success Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Division deleted successfully"
   }
   ```

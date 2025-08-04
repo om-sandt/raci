@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, NavLink, useLocation } from 'react-router-dom';
 import apiService from '../../src/services/api';
 import authService from '../../src/services/auth.service';
+import locationService from '../../src/services/location.service';
+import divisionService from '../../src/services/division.service';
 import '../../styles/dashboard.scss';
 import env from '../../src/config/env';
 
@@ -22,7 +24,11 @@ const CreateDepartment = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
-    hodId: ''
+    hodId: '',
+    size: '',
+    location: '',
+    division: '',
+    function: ''
   });
   
   const [users, setUsers] = useState([]);
@@ -45,6 +51,14 @@ const CreateDepartment = () => {
   
   const [companyData, setCompanyData] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Add locations state
+  const [locations, setLocations] = useState([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  
+  // Add divisions state
+  const [divisions, setDivisions] = useState([]);
+  const [loadingDivisions, setLoadingDivisions] = useState(false);
   
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -160,6 +174,50 @@ const CreateDepartment = () => {
     };
     
     fetchUserData();
+  }, []);
+  
+  // Fetch locations on mount (like user creation)
+  useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        setLoadingLocations(true);
+        const response = await locationService.getAllLocations();
+        if (response && response.data) {
+          setLocations(response.data);
+        } else if (Array.isArray(response)) {
+          setLocations(response);
+        } else {
+          setLocations([]);
+        }
+      } catch (error) {
+        setLocations([]);
+      } finally {
+        setLoadingLocations(false);
+      }
+    };
+    fetchLocations();
+  }, []);
+  
+  // Fetch divisions on mount
+  useEffect(() => {
+    const fetchDivisions = async () => {
+      try {
+        setLoadingDivisions(true);
+        const response = await divisionService.getDivisions();
+        if (response && response.data) {
+          setDivisions(response.data);
+        } else if (Array.isArray(response)) {
+          setDivisions(response);
+        } else {
+          setDivisions([]);
+        }
+      } catch (error) {
+        setDivisions([]);
+      } finally {
+        setLoadingDivisions(false);
+      }
+    };
+    fetchDivisions();
   }, []);
   
   const handleChange = (e) => {
@@ -327,7 +385,7 @@ const CreateDepartment = () => {
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             onError={(e) => {
               const parent = e.target.parentNode;
-              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}</div>`;
+              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
             }}
           />
         </div>
@@ -349,7 +407,7 @@ const CreateDepartment = () => {
         marginRight: '10px',
         flexShrink: 0
       }}>
-        {companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
       </div>
     );
   };
@@ -376,194 +434,81 @@ const CreateDepartment = () => {
   };
 
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-        <div className="brand" style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          padding: '12px',
-          height: '64px',
-          borderBottom: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+    <div className="dashboard-layout-new">
+      <header className="dashboard-header-new">
+        <div className="header-left">
+          <div className="company-info">
+            <button 
+              onClick={() => navigate('/company-admin/dashboard')}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
             {renderCompanyLogo()}
-            <span style={{ 
-              fontWeight: '600', 
-              fontSize: '16px',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              color: 'white',
-              letterSpacing: '0.5px'
-            }}>
-              {companyData ? companyData.name : 'Company'}
-            </span>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? companyData.name : 'Company'} Administration
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Create Department
+              </p>
+            </div>
           </div>
         </div>
-        
-        <nav>
-          <NavLink to="/company-admin/dashboard" className="nav-item">
-                        <i className="icon">📊</i> Dashboard
-                      </NavLink>
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('users')}
-          >
-            <i className="icon">👥</i> 
-            <span>User Administration</span>
-            <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-            <NavLink to="/company-admin/user-creation" className="nav-item">
-              Create User
-            </NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">
-              Update User
-            </NavLink>
-          </div>
-          
-          <div 
-            className={`nav-item active`}
-            onClick={() => toggleSection('departments')}
-          >
-            <i className="icon">🏢</i> 
-            <span>Department Workspace</span>
-            <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-            <NavLink to="/company-admin/department-creation" className="nav-item active">
-              Create Department
-            </NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">
-              Department Workspace
-            </NavLink>
-          </div>
-
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('designations')}
-          >
-            <i className="icon">🏷️</i> 
-            <span>Designation Directory</span>
-            <i className={`dropdown-icon ${expandedSections.designations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.designations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/designation-creation" className="nav-item">
-              Create Designation
-            </NavLink>
-            <NavLink to="/company-admin/designation-management" className="nav-item">
-              Update Designation
-            </NavLink>
-          </div>
-
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('locations')}
-          >
-            <i className="icon">📍</i> 
-            <span>Location Center</span>
-            <i className={`dropdown-icon ${expandedSections.locations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.locations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/location-creation" className="nav-item">
-              Create Location
-            </NavLink>
-            <NavLink to="/company-admin/location-management" className="nav-item">
-              Update Location
-            </NavLink>
-          </div>
-          
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('raci')}
-          >
-            <i className="icon">📅</i> 
-            <span>RACI Operations</span>
-            <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-            <NavLink to="/company-admin/event-master" className="nav-item">
-              Event Master
-            </NavLink>
-            <NavLink to="/company-admin/event-list" className="nav-item">
-              Event List
-            </NavLink>
-            <NavLink to="/company-admin/raci-assignment" className="nav-item">
-              RACI Assignment
-            </NavLink>
-            <NavLink to="/company-admin/raci-tracker" className="nav-item">
-              RACI Tracker
-            </NavLink>
-          </div>
-          
-          <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-            <i className="icon">📆</i> Meeting Calendar
-          </NavLink>
-          
-          <NavLink to="/company-admin/hierarchy" className="nav-item">
-            <i className="icon">🏢</i> Hierarchy
-          </NavLink>
-          
-          <NavLink to="/company-admin/settings" className="nav-item">
-            <i className="icon">⚙️</i> Company Settings
-          </NavLink>
-          
-          <button className="nav-item" onClick={handleLogout} style={{
-            width: '100%',
-            textAlign: 'left',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginLeft: '0.5rem',
-            height: '44px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}>
-            <i className="icon">🚪</i> Logout
-          </button>
-        </nav>
-      </aside>
-      
-      {/* Collapse toggle button */}
-      <button onClick={toggleSidebar} style={{
-        position: 'fixed',
-        top: '12px',
-        left: sidebarOpen ? '312px' : '12px',
-        zIndex: 100,
-        background: '#4f46e5',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 8px',
-        cursor: 'pointer'
-      }}>
-        {sidebarOpen ? '⮜' : '⮞'}
-      </button>
-      
-      <main className="dashboard-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">
-            {companyData ? `${companyData.name} Administration` : 'Administration'}
-          </div>
-          <div className="header-actions">
-            <div className="user-info">
-              <div className="user-avatar">
-                {renderUserPhoto()}
-              </div>
-              <div className="user-details">
-                <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
-                <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
-              </div>
+        <div className="header-right">
+          <div className="user-info">
+            <div className="user-avatar">
+              {renderUserPhoto()}
             </div>
-            {/* Logout button removed from header as it exists in the sidebar */}
+            <div className="user-details">
+              <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
+              <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
+            </div>
           </div>
-        </header>
-        
-        <div className="content-wrapper">
+          <button 
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+      
+      <main className="dashboard-content-new">
+        <div style={{ padding: '2rem', margin: '0 2rem' }}>
           <div className="page-header">
             <h1>Create New Department</h1>
           </div>
@@ -626,6 +571,7 @@ const CreateDepartment = () => {
               width: '100%',
               boxSizing: 'border-box'
             }}>
+
               <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
                 <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Department Name *</label>
                 <input
@@ -647,7 +593,6 @@ const CreateDepartment = () => {
                   }}
                 />
               </div>
-              
               <div className="form-group" style={{ width: '100%', boxSizing: 'border-box' }}>
                 <label htmlFor="hodId" style={{ display: 'block', marginBottom: '0.5rem' }}>Head of Department (Optional)</label>
                 <select
@@ -681,6 +626,124 @@ const CreateDepartment = () => {
                 <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.5rem' }}>
                   You can assign a Head of Department later if needed.
                 </p>
+              </div>
+              <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
+                <label htmlFor="size" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Department Size</label>
+                <input
+                  type="text"
+                  id="size"
+                  name="size"
+                  value={formData.size}
+                  onChange={handleChange}
+                  placeholder="Enter department size"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                    display: 'block'
+                  }}
+                />
+              </div>
+              <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
+                <label htmlFor="location" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Location</label>
+                <select
+                  id="location"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  disabled={loadingLocations}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                    display: 'block'
+                  }}
+                >
+                  <option value="">Select Location</option>
+                  {locations.map(loc => (
+                    <option key={loc.id || loc._id || loc.name} value={loc.name}>{loc.name}</option>
+                  ))}
+                </select>
+                {loadingLocations && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
+                    Loading locations...
+                  </div>
+                )}
+                {!loadingLocations && locations.length === 0 && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#b91c1c' }}>
+                    No locations found. Please create locations first.
+                  </div>
+                )}
+              </div>
+              <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
+                <label htmlFor="division" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Division</label>
+                <select
+                  id="division"
+                  name="division"
+                  value={formData.division}
+                  onChange={handleChange}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                    display: 'block',
+                    backgroundColor: 'white'
+                  }}
+                  disabled={loadingDivisions}
+                >
+                  <option value="">Select a division</option>
+                  {loadingDivisions ? (
+                    <option value="" disabled>Loading divisions...</option>
+                  ) : divisions.length > 0 ? (
+                    divisions.map((division) => (
+                      <option key={division.id} value={division.id}>
+                        {division.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>No divisions available</option>
+                  )}
+                </select>
+                {loadingDivisions && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                    Loading divisions...
+                  </div>
+                )}
+                {!loadingDivisions && divisions.length === 0 && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#b91c1c' }}>
+                    No divisions found. Please create divisions first.
+                  </div>
+                )}
+              </div>
+              <div className="form-group" style={{ width: '100%', boxSizing: 'border-box', display: 'block' }}>
+                <label htmlFor="function" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Function</label>
+                <input
+                  type="text"
+                  id="function"
+                  name="function"
+                  value={formData.function}
+                  onChange={handleChange}
+                  placeholder="Enter function"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    boxSizing: 'border-box',
+                    display: 'block'
+                  }}
+                />
               </div>
               
               <div className="form-actions" style={{ 
@@ -725,27 +788,91 @@ const CreateDepartment = () => {
             </form>
           </div>
         </div>
-        
-        <style jsx>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          
-          .content-wrapper {
-            padding: 1.5rem;
-            max-width: 100%;
-            box-sizing: border-box;
-          }
-          
-          .dashboard-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-          }
-        `}</style>
       </main>
+
+      <style jsx="true">{`
+        .dashboard-layout-new {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .dashboard-header-new {
+          background: white;
+          border-bottom: 1px solid #e5e7eb;
+          padding: 1rem 2rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
+        
+        .header-left {
+          display: flex;
+          align-items: center;
+        }
+        
+        .company-info {
+          display: flex;
+          align-items: center;
+        }
+        
+        .header-right {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        
+        .user-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: #e0e7ff;
+          color: #4f46e5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+          font-size: 1rem;
+          overflow: hidden;
+        }
+        
+        .user-details {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .user-name {
+          font-weight: 600;
+          font-size: 0.9rem;
+          color: #111827;
+        }
+        
+        .user-role {
+          font-size: 0.8rem;
+          color: #6b7280;
+        }
+        
+        .dashboard-content-new {
+          flex: 1;
+          overflow-y: auto;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

@@ -335,7 +335,7 @@ const EventList = () => {
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             onError={(e) => {
               const parent = e.target.parentNode;
-              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}</div>`;
+              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
             }}
           />
         </div>
@@ -357,7 +357,7 @@ const EventList = () => {
         marginRight: '10px',
         flexShrink: 0
       }}>
-        {companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
       </div>
     );
   };
@@ -388,6 +388,10 @@ const EventList = () => {
       localStorage.removeItem('raci_auth_token');
       navigate('/auth/login');
     }
+  };
+
+  const handleBackToDashboard = () => {
+    navigate('/company-admin/dashboard');
   };
 
   const handleDeleteEvent = async (eventId) => {
@@ -687,136 +691,86 @@ const EventList = () => {
 
   // Update the event status display in the table
   return (
-    <div className="dashboard-layout fix-layout">
-      {/* Sidebar */}
-      <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-        <div className="brand" style={{ display: 'flex', alignItems: 'center', padding: 12, height: 64, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+    <div className="dashboard-layout-new">
+      <header className="dashboard-header-new">
+        <div className="header-left">
+          <div className="company-info">
+            <button 
+              onClick={handleBackToDashboard}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
             {renderCompanyLogo()}
-            <span style={{ fontWeight: 600, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'white' }}>
-              {companyData ? companyData.name : 'Company'}
-            </span>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? companyData.name : 'Company'} Administration
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Events List
+              </p>
+            </div>
           </div>
         </div>
-
-        <nav>
-          <NavLink to="/company-admin/dashboard" className="nav-item">
-            <i className="icon">📊</i> Dashboard
-          </NavLink>
-
-          {/* User Admin */}
-          <div className="nav-item" onClick={() => toggleSection('users')}>
-            <i className="icon">👥</i> <span>User Administration</span>
-            <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
+        <div className="header-right">
+          <div className="user-info">
+            <div className="user-avatar">
+              {renderUserPhoto()}
+            </div>
+            <div className="user-details">
+              <div className="user-name">{currentUser ? currentUser.name : 'Loading...'}</div>
+              <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
+            </div>
           </div>
-          <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-            <NavLink to="/company-admin/user-creation" className="nav-item">Create User</NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">Update User</NavLink>
-          </div>
-
-          {/* Department Management */}
-          <div className="nav-item" onClick={() => toggleSection('departments')}>
-            <i className="icon">🏢</i> <span>Department Workspace</span>
-            <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-            <NavLink to="/company-admin/department-creation" className="nav-item">Create Department</NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">Department Workspace</NavLink>
-          </div>
-
-          {/* Designation Management */}
-          <div className="nav-item" onClick={() => toggleSection('designations')}>
-            <i className="icon">🏷️</i> <span>Designation Directory</span>
-            <i className={`dropdown-icon ${expandedSections.designations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.designations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/designation-creation" className="nav-item">Create Designation</NavLink>
-            <NavLink to="/company-admin/designation-management" className="nav-item">Update Designation</NavLink>
-          </div>
-
-          {/* Location Management */}
-          <div className="nav-item" onClick={() => toggleSection('locations')}>
-            <i className="icon">📍</i> <span>Location Center</span>
-            <i className={`dropdown-icon ${expandedSections.locations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.locations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/location-creation" className="nav-item">Create Location</NavLink>
-            <NavLink to="/company-admin/location-management" className="nav-item">Update Location</NavLink>
-          </div>
-
-          {/* RACI Management */}
-          <div className="nav-item active" onClick={() => toggleSection('raci')}>
-            <i className="icon">📅</i> <span>RACI Operations</span>
-            <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-            <NavLink to="/company-admin/event-master" className="nav-item">Event Master</NavLink>
-            <NavLink to="/company-admin/event-list" className="nav-item active">Event List</NavLink>
-            <NavLink to="/company-admin/raci-assignment" className="nav-item">RACI Assignment</NavLink>
-            <NavLink to="/company-admin/raci-tracker" className="nav-item">RACI Tracker</NavLink>
-          </div>
-
-          <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-            <i className="icon">📆</i> Meeting Calendar
-          </NavLink>
-
-          <NavLink to="/company-admin/hierarchy" className="nav-item">
-            <i className="icon">🏢</i> Hierarchy
-          </NavLink>
-          
-          <NavLink to="/company-admin/settings" className="nav-item">
-            <i className="icon">⚙️</i> Company Settings
-          </NavLink>
-
-                      <button className="nav-item" onClick={handleLogout} style={{ 
-              width: '100%', 
-              textAlign: 'left', 
-              background: 'none', 
-              border: 'none', 
-              cursor: 'pointer', 
-              padding: '0.75rem 1rem', 
-              display: 'flex', 
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginLeft: '0.5rem',
-              height: '44px',
+          <button 
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
               borderRadius: '6px',
-              transition: 'background-color 0.2s'
-            }}>
-            <i className="icon">🚪</i> Logout
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+          >
+            Logout
           </button>
-        </nav>
-      </aside>
-
-      {/* Collapse toggle button */}
-      <button onClick={toggleSidebar} style={{
-        position: 'fixed',
-        top: '12px',
-        left: sidebarOpen ? '312px' : '12px',
-        zIndex: 100,
-        background: '#4f46e5',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 8px',
-        cursor: 'pointer'
-      }}>
-        {sidebarOpen ? '⮜' : '⮞'}
-      </button>
-
-      {/* Main */}
-      <main className="dashboard-content fix-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">{companyData ? companyData.name : 'Company'} Administration</div>
-          <div className="header-actions" />
-        </header>
-
-        <div className="content-wrapper fix-wrapper">
+        </div>
+              </header>
+      
+      <main className="dashboard-content-new">
+        <div style={{ padding: '2rem', margin: '0 2rem' }}>
           <div className="page-header">
             <h1>Events List</h1>
           </div>
 
-          <div className="card fix-card">
+          <div className="card" style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', marginBottom: '1.5rem', padding: '1.5rem' }}>
             <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '1rem' }}>
               <h2>Events</h2>
               <button onClick={fetchEvents} title="Refresh Events" style={{ padding: '0.5rem', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer' }}>
@@ -926,16 +880,6 @@ const EventList = () => {
 
       {/* Render rejection reason modal */}
       {renderReasonModal()}
-
-      {/* Simple styles fix */}
-      <style jsx="true" global="true">{`
-        .fix-layout { display: grid; grid-template-columns: 300px 1fr; width: 100%; height: 100vh; overflow: hidden; }
-        .fix-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 0 !important; }
-        .fix-wrapper { padding: 1.5rem 2rem 1.5rem 1.5rem !important; width: 100%; box-sizing: border-box; }
-        .fix-card { background: white; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 1.5rem; padding: 1.5rem; }
-        @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg); } }
-        .dashboard-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-      `}</style>
     </div>
   );
 };

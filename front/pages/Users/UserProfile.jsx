@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import authService from '../../src/services/auth.service';
 
 const UserProfile = ({ userData: propUserData }) => {
+  const navigate = useNavigate();
   const [user, setUser] = useState({});
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -101,6 +103,10 @@ const UserProfile = ({ userData: propUserData }) => {
     
     setEditMode(false);
   };
+
+  const handleBackToDashboard = () => {
+    navigate('/user/raci-dashboard');
+  };
   
   if (loading) {
     return (
@@ -156,10 +162,10 @@ const UserProfile = ({ userData: propUserData }) => {
   };
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>My Profile</h1>
-        <p>View and manage your profile information</p>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
+      <div className="page-header" style={{ position: 'relative', marginBottom: '2rem' }}>
+        <h1 style={{ textAlign: 'center', margin: 0 }}>My Profile</h1>
+        <p style={{ textAlign: 'center', margin: '0.5rem 0 0 0' }}>View and manage your profile information</p>
       </div>
       
       {loading ? (

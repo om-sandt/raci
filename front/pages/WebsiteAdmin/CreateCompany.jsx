@@ -27,6 +27,9 @@ const CreateCompany = () => {
   const [projectLogo, setProjectLogo] = useState(null);
   const [projectLogoPreview, setProjectLogoPreview] = useState('');
   
+  // Add state for modal at the top
+  const [showProjectNameHelp, setShowProjectNameHelp] = useState(false);
+  
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({
@@ -339,8 +342,20 @@ const CreateCompany = () => {
             <label htmlFor="projectName" style={{ 
               display: 'block',
               marginBottom: '0.5rem',
-              fontWeight: '500'
-            }}>Project Name</label>
+              fontWeight: '500',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              Project Name
+              <span
+                style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }}
+                onClick={() => setShowProjectNameHelp(true)}
+                title="Help on Project Name"
+              >
+                ℹ️
+              </span>
+            </label>
             <input
               type="text"
               id="projectName"
@@ -448,6 +463,64 @@ const CreateCompany = () => {
             </button>
           </div>
         </form>
+        {/* Project Name Help Modal */}
+        {showProjectNameHelp && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+            onClick={() => setShowProjectNameHelp(false)}
+          >
+            <div style={{
+              background: 'white',
+              borderRadius: '10px',
+              padding: '2rem',
+              maxWidth: '420px',
+              boxShadow: '0 2px 16px rgba(0,0,0,0.18)',
+              position: 'relative',
+              cursor: 'auto'
+            }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowProjectNameHelp(false)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '14px',
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.3em',
+                  cursor: 'pointer',
+                  color: '#888'
+                }}
+                aria-label="Close"
+              >×</button>
+              <h3 style={{ marginBottom: '1rem', color: '#4f46e5' }}>Help box on Project name</h3>
+              <div style={{ fontSize: '1.05em', color: '#222', lineHeight: '1.7' }}>
+                <div style={{ marginBottom: '0.7em' }}>
+                  <b>Enter a clear and professional project name</b> that accurately reflects the initiative’s scope or objective.
+                </div>
+                <div style={{ marginBottom: '0.7em' }}>
+                  This name will be used throughout the <b>RACI Matrix</b>, documentation, and stakeholder communications.
+                </div>
+                <div style={{ marginBottom: '0.5em' }}><b>For example:</b></div>
+                <ul style={{ paddingLeft: '1.2em', margin: 0 }}>
+                  <li>Finance Transformation – Q3 2025</li>
+                  <li>Customer Experience Enhancement Program</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

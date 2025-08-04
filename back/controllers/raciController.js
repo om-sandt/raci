@@ -1874,3 +1874,226 @@ exports.refreshRaciApprovalStatus = async (req, res, next) => {
     next(error);
   }
 };
+
+// @desc    Get events eligible for RACI matrix creation
+// @route   GET /api/raci/eligible-events
+// @access  Private (company_admin or hod)
+exports.getEligibleEventsForRaci = async (req, res, next) => {
+  try {
+    const companyId = req.user.company_id;
+    const departmentId = req.user.department_id;
+    const isCompanyAdmin = req.user.role === 'company_admin';
+    
+    let query = '';
+    let queryParams = [];
+    
+    if (isCompanyAdmin) {
+      // For company admin, get all approved events with tasks from their company
+      query = `
+        SELECT DISTINCT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+               e.department_id, e.approval_status, e.created_at,
+               d.name as department_name,
+               COUNT(t.task_id) as task_count,
+               COUNT(ra.raci_id) as raci_assignment_count
+        FROM events e
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        LEFT JOIN tasks t ON e.event_id = t.event_id
+        LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+        WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+        GROUP BY e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+                 e.department_id, e.approval_status, e.created_at, d.name
+        HAVING COUNT(t.task_id) > 0
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [companyId];
+    } else {
+      // For HOD, get only approved events with tasks from their department
+      query = `
+        SELECT DISTINCT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+               e.department_id, e.approval_status, e.created_at,
+               d.name as department_name,
+               COUNT(t.task_id) as task_count,
+               COUNT(ra.raci_id) as raci_assignment_count
+        FROM events e
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        LEFT JOIN tasks t ON e.event_id = t.event_id
+        LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+        WHERE e.department_id = $1 AND e.approval_status = 'APPROVED'
+        GROUP BY e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+                 e.department_id, e.approval_status, e.created_at, d.name
+        HAVING COUNT(t.task_id) > 0
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [departmentId];
+    }
+
+    const { rows } = await db.query(query, queryParams);
+
+    // Format the response
+    const events = rows.map(event => ({
+      id: event.event_id,
+      name: event.name,
+      description: event.description,
+      division: event.division,
+      priority: event.priority,
+      eventType: event.event_type,
+      kpi: event.kpi,
+      department: {
+        id: event.department_id,
+        name: event.department_name
+      },
+      status: event.approval_status,
+      taskCount: parseInt(event.task_count),
+      raciAssignmentCount: parseInt(event.raci_assignment_count),
+      hasRaciAssignments: parseInt(event.raci_assignment_count) > 0,
+      createdAt: event.created_at
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Events eligible for RACI matrix creation",
+      events
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all approved events for RACI matrix creation (including those without tasks)
+// @route   GET /api/raci/all-approved-events
+// @access  Private (company_admin or hod)
+exports.getAllApprovedEventsForRaci = async (req, res, next) => {
+  try {
+    const companyId = req.user.company_id;
+    const departmentId = req.user.department_id;
+    const isCompanyAdmin = req.user.role === 'company_admin';
+    
+    let query = '';
+    let queryParams = [];
+    
+    if (isCompanyAdmin) {
+      // For company admin, get all approved events from their company
+      query = `
+        SELECT DISTINCT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+               e.department_id, e.approval_status, e.created_at,
+               d.name as department_name,
+               COUNT(t.task_id) as task_count,
+               COUNT(ra.raci_id) as raci_assignment_count
+        FROM events e
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        LEFT JOIN tasks t ON e.event_id = t.event_id
+        LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+        WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+        GROUP BY e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+                 e.department_id, e.approval_status, e.created_at, d.name
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [companyId];
+    } else {
+      // For HOD, get only approved events from their department
+      query = `
+        SELECT DISTINCT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+               e.department_id, e.approval_status, e.created_at,
+               d.name as department_name,
+               COUNT(t.task_id) as task_count,
+               COUNT(ra.raci_id) as raci_assignment_count
+        FROM events e
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        LEFT JOIN tasks t ON e.event_id = t.event_id
+        LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+        WHERE e.department_id = $1 AND e.approval_status = 'APPROVED'
+        GROUP BY e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi,
+                 e.department_id, e.approval_status, e.created_at, d.name
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [departmentId];
+    }
+
+    const { rows } = await db.query(query, queryParams);
+
+    // Format the response
+    const events = rows.map(event => ({
+      id: event.event_id,
+      name: event.name,
+      description: event.description,
+      division: event.division,
+      priority: event.priority,
+      eventType: event.event_type,
+      kpi: event.kpi,
+      department: {
+        id: event.department_id,
+        name: event.department_name
+      },
+      status: event.approval_status,
+      taskCount: parseInt(event.task_count),
+      raciAssignmentCount: parseInt(event.raci_assignment_count),
+      hasTasks: parseInt(event.task_count) > 0,
+      hasRaciAssignments: parseInt(event.raci_assignment_count) > 0,
+      createdAt: event.created_at
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "All approved events for RACI matrix creation",
+      events
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get approved events for dropdown selection in RACI matrix creation
+// @route   GET /api/raci/events-dropdown
+// @access  Private (company_admin or hod)
+exports.getApprovedEventsForDropdown = async (req, res, next) => {
+  try {
+    const companyId = req.user.company_id;
+    const departmentId = req.user.department_id;
+    const isCompanyAdmin = req.user.role === 'company_admin';
+    
+    let query = '';
+    let queryParams = [];
+    
+    if (isCompanyAdmin) {
+      // For company admin, get all approved events from their company
+      query = `
+        SELECT e.event_id, e.name, e.description, e.department_id,
+               d.name as department_name
+        FROM events e
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [companyId];
+    } else {
+      // For HOD, get only approved events from their department
+      query = `
+        SELECT e.event_id, e.name, e.description, e.department_id,
+               d.name as department_name
+        FROM events e
+        LEFT JOIN departments d ON e.department_id = d.department_id
+        WHERE e.department_id = $1 AND e.approval_status = 'APPROVED'
+        ORDER BY e.created_at DESC
+      `;
+      queryParams = [departmentId];
+    }
+
+    const { rows } = await db.query(query, queryParams);
+
+    // Format the response for dropdown
+    const events = rows.map(event => ({
+      value: event.event_id,
+      label: event.name,
+      description: event.description,
+      department: event.department_name
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Approved events for dropdown",
+      events
+    });
+  } catch (error) {
+    next(error);
+  }
+};

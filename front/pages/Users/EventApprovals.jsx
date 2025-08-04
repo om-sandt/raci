@@ -1,9 +1,11 @@
 // Creating new component EventApprovals to list pending events for HOD with approve/reject functionality.
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import env from '../../src/config/env';
 import eventService from '../../src/services/event.service';
 
 const EventApprovals = ({ userData }) => {
+  const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -13,10 +15,20 @@ const EventApprovals = ({ userData }) => {
   const [historyEvents, setHistoryEvents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const handleBackToDashboard = () => {
+    navigate('/user/raci-dashboard');
+  };
 
   // Fetch events on mount or when user changes
   useEffect(() => {
-    if (!userData || !userData.id) return;
+    console.log('EventApprovals: useEffect triggered with userData:', userData);
+    if (!userData || !userData.id) {
+      console.log('EventApprovals: No userData or userData.id, returning early');
+      return;
+    }
+    console.log('EventApprovals: Starting to fetch events for user ID:', userData.id);
     fetchPendingEvents();
     fetchHistoricalEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -29,22 +41,90 @@ const EventApprovals = ({ userData }) => {
    */
   const fetchPendingEvents = async () => {
     try {
+      console.log('EventApprovals: Starting fetchPendingEvents');
       setLoading(true);
       const token = localStorage.getItem('raci_auth_token');
 
-      // Step 1: fetch list of pending events (basic info)
-      const listResp = await fetch(`${env.apiBaseUrl}/events?status=pending&limit=1000`, {
+      // Step 1: fetch all events first to see what's available
+      console.log('EventApprovals: Fetching all events first to check available data');
+      const allEventsResp = await fetch(`${env.apiBaseUrl}/events`, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json'
         }
       });
-      if (!listResp.ok) throw new Error(`API error: ${listResp.status}`);
-      const listData = await listResp.json();
+      console.log('EventApprovals: All events response status:', allEventsResp.status);
+      if (allEventsResp.ok) {
+        const allEventsData = await allEventsResp.json();
+        console.log('EventApprovals: All events data:', allEventsData);
+        
+        let allEvents = [];
+        if (Array.isArray(allEventsData)) allEvents = allEventsData;
+        else if (allEventsData && Array.isArray(allEventsData.events)) allEvents = allEventsData.events;
+        
+        console.log('EventApprovals: All events list:', allEvents.map(e => ({ id: e.id, name: e.name, status: e.status, hod: e.hod })));
+      }
 
+      // Step 2: try different status values
+      const statusValues = ['pending', 'PENDING', 'PENDING_APPROVAL', 'not_started'];
       let list = [];
-      if (Array.isArray(listData)) list = listData;
-      else if (listData && Array.isArray(listData.events)) list = listData.events;
+      
+      for (const status of statusValues) {
+        console.log(`EventApprovals: Trying status: ${status}`);
+        try {
+          const listResp = await fetch(`${env.apiBaseUrl}/events?status=${status}&limit=1000`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json'
+            }
+          });
+          console.log(`EventApprovals: ${status} events response status:`, listResp.status);
+          if (listResp.ok) {
+            const listData = await listResp.json();
+            console.log(`EventApprovals: ${status} events data:`, listData);
+            
+            if (Array.isArray(listData)) list = listData;
+            else if (listData && Array.isArray(listData.events)) list = listData.events;
+            
+            if (list.length > 0) {
+              console.log(`EventApprovals: Found ${list.length} events with status ${status}`);
+              break;
+            }
+          }
+        } catch (err) {
+          console.log(`EventApprovals: Error fetching ${status} events:`, err);
+        }
+      }
+      
+      console.log('EventApprovals: Final events list to process:', list);
+
+      // If no events found with status filtering, try fetching all events and filtering client-side
+      if (list.length === 0) {
+        console.log('EventApprovals: No events found with status filtering, trying to fetch all events');
+        try {
+          const allEventsResp = await fetch(`${env.apiBaseUrl}/events`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json'
+            }
+          });
+          if (allEventsResp.ok) {
+            const allEventsData = await allEventsResp.json();
+            let allEvents = [];
+            if (Array.isArray(allEventsData)) allEvents = allEventsData;
+            else if (allEventsData && Array.isArray(allEventsData.events)) allEvents = allEventsData.events;
+            
+            // Filter for pending events client-side
+            const pendingEvents = allEvents.filter(e => 
+              ['pending', 'PENDING', 'PENDING_APPROVAL', 'not_started'].includes(e.status?.toLowerCase())
+            );
+            console.log('EventApprovals: Found pending events client-side:', pendingEvents);
+            list = pendingEvents;
+          }
+        } catch (err) {
+          console.log('EventApprovals: Error fetching all events:', err);
+        }
+      }
 
       // Step 2: for each event, fetch full details in parallel (to get hod_id)
       const detailedResults = await Promise.all(
@@ -65,13 +145,19 @@ const EventApprovals = ({ userData }) => {
         })
       );
 
+      console.log('EventApprovals: Detailed results:', detailedResults);
+      
       const pendingForHod = detailedResults.filter(e => {
         if (!e) return false;
-        if (e.status !== 'pending') return false;
+        // Check for various pending status values
+        const isPending = ['pending', 'PENDING', 'PENDING_APPROVAL', 'not_started'].includes(e.status?.toLowerCase());
+        if (!isPending) return false;
         const hodRef = e.hod && e.hod.id ? e.hod.id : (typeof e.hod === 'number' ? e.hod : null);
+        console.log('EventApprovals: Checking event', e.id, 'status:', e.status, 'hodRef:', hodRef, 'userData.id:', userData.id, 'match:', hodRef === userData.id);
         return hodRef === userData.id;
       });
 
+      console.log('EventApprovals: Filtered pending events for HOD:', pendingForHod);
       setEvents(pendingForHod);
     } catch (err) {
       console.error('Failed to load pending approvals', err);
@@ -171,10 +257,33 @@ const EventApprovals = ({ userData }) => {
   const handleApprove = async (eventId) => {
     if (!window.confirm('Are you sure you want to approve this event?')) return;
     try {
-      await eventService.approveEvent(eventId, true, '');
+      const response = await eventService.approveEvent(eventId, true, '');
+      console.log('Approval response:', response);
+      
+      // Remove from pending events
+      const approvedEvent = events.find(e => e.id === eventId);
       setEvents(prev => prev.filter(e => e.id !== eventId));
-      // Refresh history to show the newly approved event
-      fetchHistoricalEvents();
+      
+      // Add to history immediately with approved status
+      if (approvedEvent) {
+        const updatedEvent = {
+          ...approvedEvent,
+          status: 'approved',
+          updatedAt: new Date().toISOString(),
+          comments: 'Approved by HOD'
+        };
+        setHistoryEvents(prev => [updatedEvent, ...prev]);
+      }
+      
+      // Also refresh history from server to ensure consistency
+      setTimeout(() => {
+        fetchHistoricalEvents();
+      }, 1000);
+      
+      // Show success message
+      setSuccessMessage('Event approved successfully! Check the History tab to view the approved event.');
+      setTimeout(() => setSuccessMessage(''), 5000);
+      
     } catch (err) {
       console.error('Approval failed', err);
       alert('Could not approve event. Please try again.');
@@ -195,11 +304,34 @@ const EventApprovals = ({ userData }) => {
   const submitReject = async () => {
     if (rejectEventId == null) return;
     try {
-      await eventService.approveEvent(rejectEventId, false, rejectComment.trim() || '');
+      const response = await eventService.approveEvent(rejectEventId, false, rejectComment.trim() || '');
+      console.log('Rejection response:', response);
+      
+      // Remove from pending events
+      const rejectedEvent = events.find(e => e.id === rejectEventId);
       setEvents(prev => prev.filter(e => e.id !== rejectEventId));
       setShowRejectModal(false);
-      // Refresh history to show the newly rejected event
-      fetchHistoricalEvents();
+      
+      // Add to history immediately with rejected status
+      if (rejectedEvent) {
+        const updatedEvent = {
+          ...rejectedEvent,
+          status: 'rejected',
+          updatedAt: new Date().toISOString(),
+          rejectionReason: rejectComment.trim() || 'Rejected by HOD'
+        };
+        setHistoryEvents(prev => [updatedEvent, ...prev]);
+      }
+      
+      // Also refresh history from server to ensure consistency
+      setTimeout(() => {
+        fetchHistoricalEvents();
+      }, 1000);
+      
+      // Show success message
+      setSuccessMessage('Event rejected successfully! Check the History tab to view the rejected event.');
+      setTimeout(() => setSuccessMessage(''), 5000);
+      
     } catch (err) {
       console.error('Rejection failed', err);
       alert('Could not reject event. Please try again.');
@@ -307,13 +439,34 @@ const EventApprovals = ({ userData }) => {
   };
 
   return (
-    <div className="card" style={{ marginTop: '1rem' }}>
-      <div className="card-header" style={{ borderBottom: '1px solid #e5e7eb', padding: '1rem' }}>
-        <h2 style={{ margin: 0 }}>Event Approvals</h2>
-        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
-          Manage event approvals and view approval history
-        </p>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
+      <div className="page-header" style={{ position: 'relative', marginBottom: '2rem', textAlign: 'center' }}>
+        <h1 style={{ margin: 0 }}>Event Approvals</h1>
+        <p style={{ margin: '0.5rem 0 0 0' }}>Manage event approvals and view approval history</p>
       </div>
+      
+      {/* Success message */}
+      {successMessage && (
+        <div style={{ 
+          padding: '0.75rem 1rem',
+          backgroundColor: '#dcfce7',
+          color: '#15803d',
+          borderRadius: '8px',
+          marginBottom: '1.5rem',
+          textAlign: 'center',
+          fontWeight: '500'
+        }}>
+          {successMessage}
+        </div>
+      )}
+      
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <div className="card-header" style={{ borderBottom: '1px solid #e5e7eb', padding: '1rem' }}>
+          <h2 style={{ margin: 0 }}>Event Approvals</h2>
+          <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
+            Manage event approvals and view approval history
+          </p>
+        </div>
       
       {/* Tab Navigation */}
       <div style={{ 
@@ -429,6 +582,7 @@ const EventApprovals = ({ userData }) => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

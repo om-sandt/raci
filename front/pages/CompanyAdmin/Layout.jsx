@@ -157,6 +157,10 @@ const CompanyAdminLayout = ({ children }) => {
             <span className="icon">📂</span>
             <span>Event List</span>
           </NavLink>
+          <NavLink to="/company-admin/divisions" className={({ isActive }) => isActive ? "active" : ""}>
+            <span className="icon">🏬</span>
+            <span>Division Management</span>
+          </NavLink>
           <NavLink to="/company-admin/settings" className={({ isActive }) => isActive ? "active" : ""}>
             <span className="icon">⚙️</span>
             <span>Settings</span>
@@ -226,24 +230,44 @@ const CompanyAdminLayout = ({ children }) => {
       
       <main className="dashboard-content">
         <header className="dashboard-header">
-          {/* New: Admin avatar on the far left */}
-          <div className="header-left-avatar" style={{ display: 'flex', alignItems: 'center', marginRight: '1rem' }}>
-            <div className="user-avatar" style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden' }}>
-              {currentUser && (currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto) ? (
-                <img
-                  src={getAssetUrl(currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto)}
-                  alt={currentUser?.name || 'Admin'}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                <div style={{ width: '100%', height: '100%', borderRadius: '50%', backgroundColor: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-                  {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'A'}
-                </div>
-              )}
+          <div className="header-left">
+            <button 
+              onClick={() => navigate('/company-admin/dashboard')}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem'
+              }}
+              onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
+            {/* New: Admin avatar on the far left */}
+            <div className="header-left-avatar" style={{ display: 'flex', alignItems: 'center', marginRight: '1rem' }}>
+              <div className="user-avatar" style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden' }}>
+                {currentUser && (currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto) ? (
+                  <img
+                    src={getAssetUrl(currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto)}
+                    alt={currentUser?.name || 'Admin'}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', borderRadius: '50%', backgroundColor: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                    {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'A'}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="dashboard-title">
-            Drishti Admin Panel
+            <div className="dashboard-title">
+              Drishti Admin Panel
+            </div>
           </div>
           <div className="header-actions">
             <div className="user-info">

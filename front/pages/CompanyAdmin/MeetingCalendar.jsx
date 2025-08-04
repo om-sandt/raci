@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import '../../styles/dashboard.scss';
 import meetingService from '../../src/services/meeting.service';
 import authService from '../../src/services/auth.service';
+import env from '../../src/config/env';
 
 const MeetingCalendar = () => {
+  const navigate = useNavigate();
+  
   // State for calendar view
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -12,6 +16,127 @@ const MeetingCalendar = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  
+  // State for company data and user
+  const [companyData, setCompanyData] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loadingCompany, setLoadingCompany] = useState(true);
+  
+  // State for expanded sections in sidebar
+  const [expandedSections, setExpandedSections] = useState({
+    users: false,
+    departments: false,
+    designations: false,
+    locations: false,
+    raci: true // Auto-expand RACI section
+  });
+  
+  // State for sidebar toggle
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Toggle sidebar function
+  const toggleSidebar = () => setSidebarOpen(prev => !prev);
+  
+  // Helper to build correct asset URLs (consistent with Dashboard)
+  const getAssetUrl = (path) => {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    let base;
+    if (env.apiBaseUrl && env.apiBaseUrl.startsWith('http')) {
+      base = env.apiBaseUrl.replace(/\/?api$/i, '');
+    } else {
+      base = env.apiBaseUrl || '';
+    }
+    return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : '/' + path}`;
+  };
+
+  // Enhanced logo rendering methods (consistent with Dashboard)
+  const renderCompanyLogo = () => {
+    if (!companyData) return null;
+    
+    const rawLogo = companyData.logoUrl || companyData.logo;
+    if (rawLogo) {
+      const logoUrl = rawLogo.startsWith('http')
+        ? rawLogo
+        : `${env.apiHost}${rawLogo}`;
+      
+      console.log("Using logo URL:", logoUrl);
+      
+      return (
+        <div style={{ 
+          width: '40px', 
+          height: '40px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          marginRight: '10px',
+          flexShrink: 0,
+          border: '1px solid #f3f4f6',
+          borderRadius: '4px',
+          overflow: 'hidden',
+          background: '#fff'
+        }}>
+          <img 
+            src={logoUrl}
+            alt={companyData?.name || 'Company'} 
+            className="company-logo"
+            style={{ 
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
+              console.log("Logo failed to load, using fallback");
+              // Replace with first letter of company name inside a colored circle
+              const parent = e.target.parentNode;
+              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
+            }}
+          />
+        </div>
+      );
+    }
+    
+    // Fallback to letter display
+    return (
+      <div style={{ 
+        width: '40px', 
+        height: '40px', 
+        borderRadius: '50%', 
+        backgroundColor: '#4f46e5', 
+        color: 'white', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        fontWeight: 'bold', 
+        fontSize: '18px',
+        marginRight: '10px',
+        flexShrink: 0
+      }}>
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
+      </div>
+    );
+  };
+
+  // Render current user profile photo (used top-right)
+  const renderUserPhoto = () => {
+    if (!currentUser) return null;
+    const photoUrl = currentUser.photo || currentUser.photoUrl || currentUser.profilePhoto;
+    if (photoUrl) {
+      const finalUrl = getAssetUrl(photoUrl);
+      return (
+        <img
+          src={finalUrl}
+          alt={currentUser?.name || 'User'}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+          onError={(e) => {
+            const parent = e.target.parentNode;
+            parent.innerHTML = `<div style=\"width: 100%; height: 100%; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;\">${currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}</div>`;
+          }}
+        />
+      );
+    }
+    return currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U';
+  };
 
   // State for meetings and related data
   const [meetings, setMeetings] = useState([]); // For meeting list (filtered)
@@ -52,6 +177,83 @@ const MeetingCalendar = () => {
     guestUserIds: []
   });
 
+  // Toggle sidebar sections
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+  
+  const handleLogout = () => {
+    if (window.confirm('Are you sure you want to log out?')) {
+      localStorage.removeItem('raci_auth_token');
+      navigate('/auth/login');
+    }
+  };
+  
+  // Load user and company data
+  useEffect(() => {
+    const fetchUserAndCompany = async () => {
+      try {
+        // Get current user
+        const userData = await authService.getCurrentUser();
+        setCurrentUser(userData);
+        console.log("User data:", userData);
+        
+        if (userData && userData.company) {
+          setLoadingCompany(true);
+          const companyId = userData.company.id;
+          
+          try {
+            // Use direct fetch to handle errors better
+            const token = localStorage.getItem('raci_auth_token');
+            const response = await fetch(`${env.apiBaseUrl}/companies/${companyId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const companyDetails = await response.json();
+              // Map snake_case fields to camelCase for project details compatibility
+              const mappedDetails = {
+                ...companyDetails,
+                projectLogo: companyDetails.projectLogo || companyDetails.project_logo || '',
+                projectName: companyDetails.projectName || companyDetails.project_name || ''
+              };
+              console.log('Company details:', mappedDetails);
+              setCompanyData(mappedDetails);
+            } else {
+              console.warn(`Could not fetch company details, status: ${response.status}`);
+              // Still set minimal company data from user object
+              const fallbackData = {
+                id: userData.company.id,
+                name: userData.company.name || 'Your Company'
+              };
+              setCompanyData(fallbackData);
+            }
+          } catch (error) {
+            console.error('Failed to fetch company details:', error);
+            // Use fallback data
+            const fallbackData = {
+              id: userData.company.id,
+              name: userData.company.name || 'Your Company'
+            };
+            setCompanyData(fallbackData);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load user data:', error);
+      } finally {
+        setLoadingCompany(false);
+      }
+    };
+    
+    fetchUserAndCompany();
+  }, []);
+  
   // Load initial data
   useEffect(() => {
     console.log('[MeetingCalendar] Component mounted, loading initial data...');
@@ -673,52 +875,72 @@ const MeetingCalendar = () => {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Meeting Calendar</h1>
-          <p>Schedule and manage meetings for your events</p>
-        </div>
-        <button 
-          className="btn btn-primary" 
-          onClick={() => {
-            resetMeetingForm();
-            setShowMeetingModal(true);
-          }}
-        >
-          + Schedule New Meeting
-        </button>
-      </div>
+    <div className="content-wrapper" style={{ padding: '2rem', margin: '0 2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>Schedule and manage meetings for your events</h2>
+              </div>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  resetMeetingForm();
+                  setShowMeetingModal(true);
+                }}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#4f46e5',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                + Schedule New Meeting
+              </button>
+            </div>
 
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
-          {error}
-          <button 
-            className="alert-close" 
-            onClick={() => setError(null)}
-            style={{ marginLeft: '1rem', background: 'none', border: 'none', fontSize: '1.2rem' }}
-          >
-            ×
-          </button>
-        </div>
-      )}
+            {error && (
+              <div className="alert alert-error" style={{ 
+                padding: '0.75rem 1rem',
+                backgroundColor: '#fee2e2',
+                color: '#b91c1c',
+                borderRadius: '8px',
+                marginBottom: '1.5rem' 
+              }}>
+                <span>{error}</span>
+                <button 
+                  className="alert-close" 
+                  onClick={() => setError(null)}
+                  style={{ marginLeft: '1rem', background: 'none', border: 'none', fontSize: '1.2rem' }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
-      {success && (
-        <div className="alert alert-success" style={{ marginBottom: '1rem' }}>
-          {success}
-          <button 
-            className="alert-close" 
-            onClick={() => setSuccess(null)}
-            style={{ marginLeft: '1rem', background: 'none', border: 'none', fontSize: '1.2rem' }}
-          >
-            ×
-          </button>
-        </div>
-      )}
+            {success && (
+              <div className="alert alert-success" style={{ 
+                padding: '0.75rem 1rem',
+                backgroundColor: '#dcfce7',
+                color: '#15803d',
+                borderRadius: '8px',
+                marginBottom: '1.5rem' 
+              }}>
+                <span>{success}</span>
+                <button 
+                  className="alert-close" 
+                  onClick={() => setSuccess(null)}
+                  style={{ marginLeft: '1rem', background: 'none', border: 'none', fontSize: '1.2rem' }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
-
-      
-      <div className="calendar-container">
+            <div className="calendar-container">
         <div className="calendar-header">
           <div className="calendar-title">
             {getMonthName(currentMonth)} {currentMonth.getFullYear()}
@@ -1399,10 +1621,8 @@ const MeetingCalendar = () => {
             </div>
           </div>
         </div>
-      )}
-
-
-    </div>
+            )}
+          </div>
   );
 };
 

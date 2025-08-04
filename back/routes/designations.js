@@ -14,7 +14,7 @@ const router = express.Router();
 router.use(protect);
 
 // Apply company admin authorization to all routes
-router.use(authorize('company_admin'));
+router.use(authorize('company_admin', 'website_admin'));
 
 // Designation routes
 router

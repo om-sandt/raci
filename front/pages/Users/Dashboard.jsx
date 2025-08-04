@@ -8,15 +8,13 @@ import TaskCalendar from './TaskCalendar';
 import HelpSupport from './HelpSupport';
 import EventApprovals from './EventApprovals';
 import RACIApprovals from './RACIApprovals';
+import Hierarchy from './Hierarchy';
 import authService from '../../src/services/auth.service';
+import env from '../../src/config/env';
 
 const UserDashboard = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [expandedSections, setExpandedSections] = useState({});
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  
-  // Replace mock user data with state and fetch real user data
   const [user, setUser] = useState({
     name: "Loading...",
     role: "Loading...",
@@ -31,6 +29,144 @@ const UserDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [financialLimits, setFinancialLimits] = useState([]);
   const [raciData, setRaciData] = useState(null);
+  const [showSubMenu, setShowSubMenu] = useState(false);
+  const [selectedSection, setSelectedSection] = useState(null);
+  const [showRaciDashboard, setShowRaciDashboard] = useState(false);
+  const [companyData, setCompanyData] = useState(null);
+
+  // Helper to build correct asset URLs
+  const getAssetUrl = (path) => {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    let base;
+    if (env.apiBaseUrl && env.apiBaseUrl.startsWith('http')) {
+      base = env.apiBaseUrl.replace(/\/?api$/i, '');
+    } else {
+      base = env.apiBaseUrl || '';
+    }
+    return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : '/' + path}`;
+  };
+
+  // Render company logo
+  const renderCompanyLogo = () => {
+    if (!companyData) return null;
+    
+    const rawLogo = companyData.logoUrl || companyData.logo;
+    if (rawLogo) {
+      const logoUrl = rawLogo.startsWith('http')
+        ? rawLogo
+        : `${env.apiHost}${rawLogo}`;
+      
+      return (
+        <div style={{ 
+          width: '40px', 
+          height: '40px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          marginRight: '10px',
+          flexShrink: 0,
+          border: '1px solid #f3f4f6',
+          borderRadius: '4px',
+          overflow: 'hidden',
+          background: '#fff'
+        }}>
+          <img 
+            src={logoUrl}
+            alt={companyData?.name || 'Company'} 
+            style={{ 
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain'
+            }}
+            onError={(e) => {
+              const parent = e.target.parentNode;
+              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
+            }}
+          />
+        </div>
+      );
+    }
+    
+    return (
+      <div style={{ 
+        width: '40px', 
+        height: '40px', 
+        borderRadius: '50%', 
+        backgroundColor: '#4f46e5', 
+        color: 'white', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        fontWeight: 'bold', 
+        fontSize: '18px',
+        marginRight: '10px',
+        flexShrink: 0
+      }}>
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
+      </div>
+    );
+  };
+
+  // Navigation sections for users
+  const navigationSections = [
+    {
+      id: 'raci',
+      title: 'RACI Dashboard',
+      icon: '📊',
+      color: '#4f46e5',
+      path: '/user/raci-dashboard'
+    },
+    {
+      id: 'tasks',
+      title: 'My Tasks',
+      icon: '📝',
+      color: '#059669',
+      subItems: [
+        { title: 'Assigned to Me', path: '/user/tasks/assigned', icon: '📋' },
+        { title: 'My Calendar', path: '/user/tasks/calendar', icon: '📅' }
+      ]
+    },
+    {
+      id: 'profile',
+      title: 'My Profile',
+      icon: '👤',
+      color: '#dc2626',
+      path: '/user/profile'
+    },
+    {
+      id: 'approvals',
+      title: 'RACI Approvals',
+      icon: '📋',
+      color: '#7c3aed',
+      path: '/user/raci-approvals'
+    }
+  ];
+
+  // Add HOD-specific sections if user role is hod
+  const finalNavigationSections = [...navigationSections];
+  console.log('UserDashboard: User role:', user.role, 'lowercase:', user.role?.toLowerCase());
+  if (user.role?.toLowerCase() === 'hod') {
+    console.log('UserDashboard: Adding HOD-specific sections');
+    finalNavigationSections.push(
+      {
+        id: 'event-approvals',
+        title: 'Event Approvals',
+        icon: '📝',
+        color: '#0891b2',
+        path: '/user/event-approvals'
+      },
+      {
+        id: 'hierarchy',
+        title: 'Hierarchy',
+        icon: '🏢',
+        color: '#be185d',
+        path: '/user/hierarchy'
+      }
+    );
+  } else {
+    console.log('UserDashboard: User is not HOD, not adding HOD sections');
+  }
   
   // Fetch user data
   useEffect(() => {
@@ -38,44 +174,99 @@ const UserDashboard = () => {
       try {
         setLoading(true);
         const userData = await authService.getCurrentUser();
-        console.log("Current user data:", userData);
         
-        if (userData) {
-          console.log("Setting user data:", userData);
-          setUser({
-            name: userData.name || userData.fullName || "User",
-            role: userData.role || userData.designation || "User",
-            company: userData.company?.name || userData.companyName || "",
-            email: userData.email || "",
-            phone: userData.phone || "",
-            designation: userData.designation || userData.title || "",
-            employeeId: userData.employeeId || userData.id || "",
-            // Make sure department is properly handled to avoid "Not Assigned" text
-            department: {
-              name: userData.department?.name || userData.departmentName || ""
-            },
-            profileImage: userData.profileImage || null,
-            // Add user ID for fetching financial limits
-            id: userData.id || userData.userId
-          });
-        } else {
-          console.warn("No user data received from getCurrentUser");
+        console.log('UserDashboard: Raw user data from API:', userData);
+        
+        // Ensure user data is properly formatted
+        const formattedUser = {
+          name: userData?.name || userData?.fullName || "User",
+          role: userData?.role || userData?.designation || "User",
+          company: userData?.company?.name || userData?.companyName || "",
+          email: userData?.email || "",
+          phone: userData?.phone || "",
+          designation: userData?.designation || userData?.title || "",
+          employeeId: userData?.employeeId || userData?.id || "",
+          department: {
+            name: userData?.department?.name || userData?.departmentName || ""
+          },
+          profileImage: userData?.profileImage || null,
+          id: userData?.id || userData?.userId
+        };
+        
+        console.log('UserDashboard: Formatted user data:', formattedUser);
+        setUser(formattedUser);
+        
+        // Fetch company data for logo
+        if (userData && userData.company && userData.company.id) {
+          try {
+            const token = localStorage.getItem('raci_auth_token');
+            const response = await fetch(`${env.apiBaseUrl}/companies/${userData.company.id}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const companyDetails = await response.json();
+              setCompanyData(companyDetails);
+            } else {
+              // Set minimal company data from user object
+              setCompanyData({
+                id: userData.company.id,
+                name: userData.company.name || 'Your Company'
+              });
+            }
+          } catch (error) {
+            console.error('Failed to fetch company details:', error);
+            // Use fallback data
+            setCompanyData({
+              id: userData.company.id,
+              name: userData.company.name || 'Your Company'
+            });
+          }
         }
+        
+        // Fetch financial limits
+        try {
+          const token = localStorage.getItem('raci_auth_token');
+          const response = await fetch(`${window.location.origin}/api/financial-limits`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const limitsData = await response.json();
+            setFinancialLimits(limitsData.data || limitsData || []);
+          }
+        } catch (error) {
+          console.error('Error fetching financial limits:', error);
+          setFinancialLimits([]);
+        }
+        
+        // Fetch RACI data
+        try {
+          const token = localStorage.getItem('raci_auth_token');
+          const response = await fetch(`${window.location.origin}/api/raci-data`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const raciResponse = await response.json();
+            setRaciData(raciResponse.data || raciResponse);
+          }
+        } catch (error) {
+          console.error('Error fetching RACI data:', error);
+          setRaciData(null);
+        }
+        
       } catch (error) {
-        console.error("Failed to load user data:", error);
-        // Set fallback user data if API fails
-        setUser({
-          name: "User",
-          role: "User",
-          company: "",
-          email: "",
-          phone: "",
-          designation: "",
-          employeeId: "",
-          department: { name: "" },
-          profileImage: null,
-          id: null
-        });
+        console.error('Error fetching user data:', error);
       } finally {
         setLoading(false);
       }
@@ -83,287 +274,115 @@ const UserDashboard = () => {
     
     fetchUserData();
   }, []);
-  
-  // Use a separate useEffect to fetch RACI assignments with financial limits
-  useEffect(() => {
-    if (user && user.id) {
-      fetchRACI(user.id);
-    }
-  }, [user.id]);
-  
-  const fetchRACI = async (userId) => {
-    if (!userId) return;
-    
-    try {
-      const token = localStorage.getItem('raci_auth_token');
-      const response = await fetch(`${window.location.origin}/api/user-raci/my-assignments`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log("User RACI assignments response:", data);
-        
-        if (data && data.success && data.data && data.data.raciAssignments) {
-          setFinancialLimits(data.data.raciAssignments);
-          setRaciData(data);
-        }
-      } else {
-        console.error("Failed to fetch RACI assignments:", response.status);
-        // Try alternative endpoint
-        try {
-          const altResponse = await fetch(`${window.location.origin}/api/users/${userId}/raci-assignments`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            }
-          });
-          
-          if (altResponse.ok) {
-            const altData = await altResponse.json();
-            console.log("Alternative RACI assignments response:", altData);
-            
-            if (altData && altData.success && altData.data && altData.data.raciAssignments) {
-              setFinancialLimits(altData.data.raciAssignments);
-              setRaciData(altData);
-            }
-          }
-        } catch (altError) {
-          console.error("Alternative endpoint also failed:", altError);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching RACI assignments:", error);
-    }
-  };
 
-  useEffect(() => {
-    if (location.pathname === '/user' || location.pathname === '/user/') {
-      navigate('/user/raci-dashboard', { replace: true });
-    }
-  }, [location.pathname]);
-
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-
-  const toggleSidebar = () => setSidebarOpen(prev => !prev);
-  
   const handleLogout = () => {
-    if (confirm('Are you sure you want to log out?')) {
-      // Clear authentication data
-      authService.logout();
-      navigate('/');
+    if (window.confirm('Are you sure you want to log out?')) {
+      localStorage.removeItem('raci_auth_token');
+      navigate('/auth/login');
     }
   };
 
-  const renderFinancialLimits = () => {
-    if (loading) {
-      return <div className="loading-message">Loading financial limits...</div>;
+  const handleSectionClick = (section) => {
+    if (section.path) {
+      // Direct navigation for single items
+      if (section.path === '/user/raci-dashboard') {
+        // If already on dashboard, show the RACI dashboard overview
+        setShowSubMenu(false);
+        setSelectedSection(null);
+        setShowRaciDashboard(true);
+      } else {
+        navigate(section.path);
+      }
+    } else if (section.subItems) {
+      // Show sub-menu for sections with sub-items
+      setSelectedSection(section);
+      setShowSubMenu(true);
+      setShowRaciDashboard(false);
     }
+  };
 
-    // Check if we have financial limits data
-    const hasFinancialLimits = financialLimits && Array.isArray(financialLimits) && financialLimits.some(
-      item => item && item.financialLimits && 
-      (item.financialLimits.min !== undefined || item.financialLimits.max !== undefined)
-    );
+  const handleSubItemClick = (path) => {
+    setShowSubMenu(false);
+    setSelectedSection(null);
+    navigate(path);
+  };
 
-    if (!hasFinancialLimits) {
-      console.log("No financial limits to display:", financialLimits);
-      return null; // Don't show anything if no financial limits
-    }
+  const handleBackToDashboard = () => {
+    setShowSubMenu(false);
+    setSelectedSection(null);
+    navigate('/user/raci-dashboard');
+    setShowRaciDashboard(false);
+  };
 
-    console.log("Rendering financial limits:", financialLimits);
-
+  // If we're on a sub-page (not the main dashboard), show the sub-page layout
+  if (location.pathname !== '/user/raci-dashboard' && !showSubMenu && !showRaciDashboard) {
     return (
-      <div className="financial-limits-section">
-        <h3>Your Financial Limits</h3>
-        <div className="financial-limits-list">
-          {financialLimits.filter(assignment => assignment && assignment.financialLimits).map((assignment, index) => (
-            <div key={`${assignment.task?.id || index}-${assignment.event?.id || index}`} className="financial-limit-item">
-              <div className="limit-task-info">
-                <div className="limit-task-name">
-                  <strong>{assignment.task?.name || assignment.taskName || 'Unnamed Task'}</strong>
-                </div>
-                <div className="limit-event-name">
-                  {assignment.event?.name || assignment.eventName || 'Unnamed Event'}
-                </div>
-                <div className="limit-role">
-                  Role: <span className="badge">{assignment.role || 'N/A'}</span>
-                </div>
-              </div>
-              <div className="limit-values">
-                {assignment.financialLimits.min !== undefined && assignment.financialLimits.min !== null && (
-                  <div className="limit-min">
-                    Min: <span className="amount">₹{assignment.financialLimits.min}</span>
-                  </div>
-                )}
-                {assignment.financialLimits.max !== undefined && assignment.financialLimits.max !== null && (
-                  <div className="limit-max">
-                    Max: <span className="amount">₹{assignment.financialLimits.max}</span>
-                  </div>
-                )}
+      <div className="dashboard-layout-new">
+        <header className="dashboard-header-new">
+          <div className="header-left">
+            <button 
+              onClick={handleBackToDashboard}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem'
+              }}
+              onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
+            <div className="company-info">
+              {renderCompanyLogo()}
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                  {user.company || 'User Dashboard'}
+                </h1>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                  {location.pathname.split('/').pop().replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </p>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="dashboard-layout">
-      <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-        <div className="brand">
-          <span className="brand-logo">🔄</span>
-          <span className="brand-name">Sharp RACI</span>
-        </div>
-        
-        <div className="sidebar-user-info" style={{
-          padding: '1rem',
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
-          marginBottom: '1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center'
-        }}>
-          <div className="user-avatar" style={{
-            width: '64px',
-            height: '64px',
-            borderRadius: '50%',
-            backgroundColor: '#4f46e5',
-            color: 'white',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            fontWeight: 'bold',
-            marginBottom: '0.5rem'
-          }}>
-            {user.name.charAt(0).toUpperCase()}
           </div>
-          <div className="user-name" style={{
-            fontWeight: '600',
-            fontSize: '1rem',
-            color: 'white',
-            textAlign: 'center'
-          }}>
-            {user.name}
-          </div>
-          <div className="user-role" style={{
-            fontSize: '0.8rem',
-            color: 'rgba(255,255,255,0.7)',
-            textAlign: 'center'
-          }}>
-            {user.role}{user.department?.name ? ` - ${user.department.name}` : ''}
-          </div>
-        </div>
-        
-        <nav>
-          <NavLink to="/user/raci-dashboard" className="nav-item">
-            <i className="icon">📊</i> RACI Dashboard
-          </NavLink>
-          
-          <div 
-            className={`nav-item ${location.pathname.includes('/tasks') || location.pathname.includes('/calendar') ? 'active' : ''}`}
-            onClick={() => toggleSection('tasks')}
-          >
-            <i className="icon">📝</i> 
-            <span>My Tasks</span>
-            <i className={`dropdown-icon ${expandedSections.tasks ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.tasks ? 'open' : ''}`}>
-            <NavLink to="/user/tasks/assigned" className="nav-item">
-              Assigned to Me
-            </NavLink>
-            <NavLink to="/user/tasks/calendar" className="nav-item">
-              My Calendar
-            </NavLink>
-          </div>
-
-
-          
-          <NavLink to="/user/profile" className="nav-item">
-            <i className="icon">👤</i> My Profile
-          </NavLink>
-          
-          <NavLink to="/user/help" className="nav-item">
-            <i className="icon">❓</i> Help & Support
-          </NavLink>
-          
-          {user.role?.toLowerCase() === 'hod' && (
-            <NavLink to="/user/event-approvals" className="nav-item">
-              <i className="icon">📝</i> Event Approvals
-            </NavLink>
-          )}
-          
-          <NavLink to="/user/raci-approvals" className="nav-item">
-            <i className="icon">📋</i> RACI Approvals
-          </NavLink>
-          
-          <button className="nav-item" onClick={handleLogout} style={{
-            width: '100%',
-            textAlign: 'left',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginLeft: '0.5rem',
-            height: '44px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}>
-            <i className="icon">🚪</i> Logout
-          </button>
-        </nav>
-      </aside>
-
-      {/* Collapse toggle button */}
-      <button onClick={toggleSidebar} style={{
-        position: 'fixed',
-        top: '12px',
-        left: sidebarOpen ? '312px' : '12px',
-        zIndex: 100,
-        background: '#4f46e5',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 8px',
-        cursor: 'pointer'
-      }}>
-        {sidebarOpen ? '⮜' : '⮞'}
-      </button>
-      
-      <main className="dashboard-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">{user.company || "Dashboard"}</div>
-          <div className="header-actions">
+          <div className="header-right">
             <div className="user-info">
-              <div className="user-avatar">{user.name.charAt(0)}</div>
+              <div className="user-avatar">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
               <div className="user-details">
                 <div className="user-name">{user.name}</div>
                 <div className="user-role">{user.role}{user.department?.name ? ` • ${user.department.name}` : ''}</div>
               </div>
             </div>
-            {/* Logout button removed from header */}
+            <button 
+              onClick={handleLogout}
+              className="logout-button"
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+              onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+            >
+              Logout
+            </button>
           </div>
         </header>
         
-        <div className="content-wrapper">
-          {/* Add financial limits section directly in the dashboard */}
-          {location.pathname === '/user/raci-dashboard' && renderFinancialLimits()}
-          
+        <main className="dashboard-content-new">
           <Routes>
             <Route path="/raci-dashboard" element={<RACIDashboard 
               userData={user} 
@@ -380,90 +399,438 @@ const UserDashboard = () => {
             <Route path="/tasks/calendar" element={<TaskCalendar />} />
             <Route path="/help" element={<HelpSupport />} />
             <Route path="/event-approvals" element={<EventApprovals userData={user} />} />
+            <Route path="/hierarchy" element={<Hierarchy />} />
             <Route path="/raci-approvals" element={<RACIApprovals userData={user} />} />
           </Routes>
+        </main>
+      </div>
+    );
+  }
+
+  // Main dashboard view with card navigation
+  return (
+    <div className="dashboard-layout-new">
+      <header className="dashboard-header-new">
+        <div className="header-left">
+          {(showSubMenu || showRaciDashboard || location.pathname !== '/user/raci-dashboard') && (
+            <button 
+              onClick={handleBackToDashboard}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem'
+              }}
+              onMouseEnter={(e) => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={(e) => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
+          )}
+          <div className="company-info">
+            {renderCompanyLogo()}
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {user.company || 'User Dashboard'}
+              </h1>
+            </div>
+          </div>
         </div>
+        <div className="header-right">
+          <div className="user-info">
+            <div className="user-avatar">
+              {user.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="user-details">
+              <div className="user-name">{user.name}</div>
+              <div className="user-role">{user.role}{user.department?.name ? ` • ${user.department.name}` : ''}</div>
+            </div>
+          </div>
+          <button 
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+          >
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <main className="dashboard-content-new">
+        {showSubMenu && selectedSection ? (
+          <div className="sub-menu-container" style={{
+            padding: '2rem',
+            margin: '0 2rem',
+            animation: 'slideInUp 0.3s ease-out'
+          }}>
+            <div className="sub-menu-header" style={{
+              marginBottom: '2rem',
+              textAlign: 'center'
+            }}>
+              <h2 style={{ 
+                fontSize: '2rem', 
+                fontWeight: '700', 
+                color: '#111827',
+                marginBottom: '0.5rem'
+              }}>
+                {selectedSection.title}
+              </h2>
+              <p style={{ 
+                fontSize: '1rem', 
+                color: '#6b7280',
+                margin: 0
+              }}>
+                Select an option to continue
+              </p>
+            </div>
+            
+            <div className="sub-menu-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: '1.5rem',
+              maxWidth: '1200px',
+              margin: '0 auto'
+            }}>
+              {selectedSection.subItems.map((item, index) => (
+                <div
+                  key={item.path}
+                  className="sub-menu-card"
+                  onClick={() => handleSubItemClick(item.path)}
+                  style={{
+                    background: 'white',
+                    borderRadius: '16px',
+                    padding: '2rem',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    border: '2px solid transparent',
+                    animation: `slideInUp 0.3s ease-out ${index * 0.1}s both`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-4px)';
+                    e.target.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                    e.target.style.borderColor = selectedSection.color;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                    e.target.style.borderColor = 'transparent';
+                  }}
+                >
+                  <div style={{
+                    fontSize: '2.5rem',
+                    width: '60px',
+                    height: '60px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '12px',
+                    background: `${selectedSection.color}15`,
+                    color: selectedSection.color
+                  }}>
+                    {item.icon}
+                  </div>
+                  <div>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: '1.25rem', 
+                      fontWeight: '600', 
+                      color: '#111827',
+                      marginBottom: '0.25rem'
+                    }}>
+                      {item.title}
+                    </h3>
+                    <p style={{ 
+                      margin: 0, 
+                      fontSize: '0.875rem', 
+                      color: '#6b7280' 
+                    }}>
+                      Click to access {item.title.toLowerCase()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : showRaciDashboard ? (
+          <div className="raci-dashboard-container" style={{
+            padding: '2rem',
+            margin: '0 2rem',
+            animation: 'fadeIn 0.5s ease-out'
+          }}>
+            <RACIDashboard />
+          </div>
+        ) : (
+          <div className="dashboard-grid" style={{
+            padding: '2rem',
+            margin: '0 2rem',
+            animation: 'fadeIn 0.5s ease-out'
+          }}>
+            <div className="dashboard-header-section" style={{
+              textAlign: 'center',
+              marginBottom: '3rem'
+            }}>
+              <h1 style={{ 
+                fontSize: '2.5rem', 
+                fontWeight: '800', 
+                color: '#111827',
+                marginBottom: '1rem'
+              }}>
+                User Dashboard
+              </h1>
+              <p style={{ 
+                fontSize: '1.125rem', 
+                color: '#6b7280',
+                maxWidth: '600px',
+                margin: '0 auto'
+              }}>
+                Manage your tasks, view RACI information, and access your profile
+              </p>
+            </div>
+
+            <div className="navigation-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '1.5rem',
+              maxWidth: '1400px',
+              margin: '0 auto'
+            }}>
+              {finalNavigationSections.map((section, index) => (
+                <div
+                  key={section.id}
+                  className="navigation-card"
+                  onClick={() => handleSectionClick(section)}
+                  style={{
+                    background: 'white',
+                    borderRadius: '20px',
+                    padding: '2rem',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    border: '3px solid transparent',
+                    animation: `slideInUp 0.5s ease-out ${index * 0.1}s both`,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-8px) scale(1.02)';
+                    e.target.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
+                    e.target.style.borderColor = section.color;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0) scale(1)';
+                    e.target.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                    e.target.style.borderColor = 'transparent';
+                  }}
+                >
+                  <div style={{
+                    fontSize: '3rem',
+                    width: '80px',
+                    height: '80px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '16px',
+                    background: `${section.color}15`,
+                    color: section.color,
+                    marginBottom: '1.5rem',
+                    flexShrink: 0
+                  }}>
+                    {section.icon}
+                  </div>
+                  
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: '1.5rem', 
+                    fontWeight: '700', 
+                    color: '#111827',
+                    marginBottom: '0.5rem'
+                  }}>
+                    {section.title}
+                  </h3>
+                  
+                  <p style={{ 
+                    margin: 0, 
+                    fontSize: '1rem', 
+                    color: '#6b7280',
+                    marginBottom: '1rem',
+                    lineHeight: '1.6'
+                  }}>
+                    {section.subItems ? 
+                      `Manage ${section.title.toLowerCase()} with ${section.subItems.length} options` :
+                      `Access ${section.title.toLowerCase()}`
+                    }
+                  </p>
+                  
+                  {section.subItems && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      color: section.color,
+                      fontWeight: '600',
+                      fontSize: '0.875rem'
+                    }}>
+                      <span>{section.subItems.length} options</span>
+                      <span style={{ fontSize: '1.2rem' }}>→</span>
+                    </div>
+                  )}
+                  
+                  {!section.subItems && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      color: section.color,
+                      fontWeight: '600',
+                      fontSize: '0.875rem'
+                    }}>
+                      <span>Access now</span>
+                      <span style={{ fontSize: '1.2rem' }}>→</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
-      
-      <style jsx>{`
-        .financial-limits-section {
-          background-color: #f9fafb;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          padding: 1rem;
-          margin: 1rem 0;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+      <style jsx="true">{`
+        @keyframes slideInUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         
-        .financial-limits-section h3 {
-          margin-top: 0;
-          font-size: 1.1rem;
-          color: #111827;
-          border-bottom: 1px solid #e5e7eb;
-          padding-bottom: 0.5rem;
-          margin-bottom: 1rem;
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
         }
         
-        .financial-limits-list {
+        .dashboard-layout-new {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
           display: flex;
           flex-direction: column;
+        }
+        
+        .dashboard-header-new {
+          background: white;
+          border-bottom: 1px solid #e5e7eb;
+          padding: 1rem 2rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
+        
+        .header-left {
+          display: flex;
+          align-items: center;
+        }
+        
+        .company-info {
+          display: flex;
+          align-items: center;
+        }
+        
+        .header-right {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        
+        .user-info {
+          display: flex;
+          align-items: center;
           gap: 0.75rem;
         }
         
-        .financial-limit-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          background-color: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 6px;
-          padding: 0.75rem;
-        }
-        
-        .limit-task-info {
-          flex: 2;
-        }
-        
-        .limit-task-name {
-          font-weight: 500;
-          color: #111827;
-          margin-bottom: 0.25rem;
-        }
-        
-        .limit-event-name {
-          color: #4b5563;
-          font-size: 0.875rem;
-          margin-bottom: 0.25rem;
-        }
-        
-        .limit-role {
-          font-size: 0.875rem;
-        }
-        
-        .badge {
-          display: inline-block;
-          background-color: #e0f2fe;
-          color: #0369a1;
-          border-radius: 9999px;
-          padding: 0.125rem 0.5rem;
-          font-size: 0.75rem;
-          font-weight: 500;
-        }
-        
-        .limit-values {
-          flex: 1;
-          text-align: right;
-        }
-        
-        .amount {
+        .user-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: #e0e7ff;
           color: #4f46e5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           font-weight: 600;
+          font-size: 1rem;
+          overflow: hidden;
         }
         
-        .loading-message {
-          text-align: center;
-          padding: 1rem;
+        .user-details {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .user-name {
+          font-weight: 600;
+          font-size: 0.9rem;
+          color: #111827;
+        }
+        
+        .user-role {
+          font-size: 0.8rem;
           color: #6b7280;
+        }
+        
+        .dashboard-content-new {
+          flex: 1;
+          overflow-y: auto;
+        }
+        
+        .navigation-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+        
+        .navigation-card:hover {
+          transform: translateY(-8px) scale(1.02);
+        }
+        
+        .sub-menu-card:hover {
+          transform: translateY(-4px);
         }
       `}</style>
     </div>

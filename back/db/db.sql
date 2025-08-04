@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   otp TEXT,
   photo TEXT,
-  location TEXT
+  location TEXT,
+  division VARCHAR(255)
   -- event_approval_assign BOOLEAN DEFAULT FALSE
 );
 
@@ -67,6 +68,10 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS departments (
   department_id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,
+  department_size TEXT,
+  location TEXT,
+  division TEXT,
+  function TEXT,
   hod_id INT REFERENCES users(user_id) ON DELETE SET NULL,
   company_id INT REFERENCES companies(company_id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -102,9 +107,11 @@ CREATE TABLE IF NOT EXISTS events (
   document_path TEXT,
   approval_status TEXT CHECK (approval_status IN ('pending', 'approved', 'rejected')) DEFAULT 'pending',
   rejection_reason TEXT,
+  division VARCHAR(255),
   approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  kpi TEXT
 );
 
 -- Ensure new columns exist even if events table was created earlier
@@ -190,6 +197,15 @@ CREATE TABLE IF NOT EXISTS locations (
   company_id INT 
 );
 
+-- Create divisions reference table
+CREATE TABLE IF NOT EXISTS divisions (
+  division_id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  company_id INT
+);
+
 -- Creating indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_company_id ON users(company_id);
 CREATE INDEX IF NOT EXISTS idx_users_department_id ON users(department_id);
@@ -204,4 +220,6 @@ CREATE INDEX IF NOT EXISTS idx_designations_name ON designations(name);
 CREATE INDEX IF NOT EXISTS idx_locations_name ON locations(name);
 CREATE INDEX IF NOT EXISTS idx_company_deletion_requests_approver ON company_deletion_requests(approver_id);
 CREATE INDEX IF NOT EXISTS idx_company_deletion_requests_status ON company_deletion_requests(status);
+CREATE INDEX IF NOT EXISTS idx_divisions_name ON divisions(name);
+CREATE INDEX IF NOT EXISTS idx_divisions_company_id ON divisions(company_id);
   

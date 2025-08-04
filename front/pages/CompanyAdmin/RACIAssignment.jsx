@@ -130,6 +130,7 @@ const RACIAssignment = () => {
         }
         
         const eventsData = await response.json();
+        console.log('RACIAssignment: Raw events response:', eventsData);
         
         // Handle different response formats
         let eventsList = [];
@@ -139,8 +140,23 @@ const RACIAssignment = () => {
           eventsList = eventsData;
         }
         
-        // Only include events whose approval status is 'approved'
-        const approvedEvents = eventsList.filter(evt => evt.status === 'approved');
+        console.log('RACIAssignment: Processed events list:', eventsList);
+        
+        // Include events with various approved status values
+        let approvedEvents = eventsList.filter(evt => {
+          const status = evt.status?.toLowerCase();
+          return ['approved', 'APPROVED', 'active', 'ACTIVE', 'completed', 'COMPLETED'].includes(status);
+        });
+        
+        console.log('RACIAssignment: All events:', eventsList.map(e => ({ id: e.id, name: e.name, status: e.status })));
+        console.log('RACIAssignment: Approved events:', approvedEvents.map(e => ({ id: e.id, name: e.name, status: e.status })));
+        
+        // If no approved events found, show all events as fallback
+        if (approvedEvents.length === 0 && eventsList.length > 0) {
+          console.log('RACIAssignment: No approved events found, showing all events as fallback');
+          approvedEvents = eventsList;
+        }
+        
         setEvents(approvedEvents);
       } catch (error) {
         setEventError('Failed to load events. Using sample data instead.');
@@ -1469,7 +1485,7 @@ const RACIAssignment = () => {
                           }}
                           className="block w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         >
-                          <option value="">Add Employee</option>
+                          <option value="">Select Employee</option>
                           {getDisplayEmployees().map(emp => {
                             const isAssignedElsewhere = isEmployeeAssignedElsewhere(task.id, 'responsible', emp.id);
                             const isAlreadySelected = getSelectedEmployeesArray(task.id, 'responsible').includes(emp.id);
@@ -1533,7 +1549,7 @@ const RACIAssignment = () => {
                           }}
                           className="block w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         >
-                          <option value="">Add Employee</option>
+                          <option value="">Select Employee</option>
                           {getDisplayEmployees().map(emp => {
                             const isAssignedElsewhere = isEmployeeAssignedElsewhere(task.id, 'accountable', emp.id);
                             const isAlreadySelected = getSelectedEmployeesArray(task.id, 'accountable').includes(emp.id);
@@ -1597,7 +1613,7 @@ const RACIAssignment = () => {
                           }}
                           className="block w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         >
-                          <option value="">Add Employee</option>
+                          <option value="">Select Employee</option>
                           {getDisplayEmployees().map(emp => {
                             const isAssignedElsewhere = isEmployeeAssignedElsewhere(task.id, 'consulted', emp.id);
                             const isAlreadySelected = getSelectedEmployeesArray(task.id, 'consulted').includes(emp.id);
@@ -1661,7 +1677,7 @@ const RACIAssignment = () => {
                           }}
                           className="block w-full px-3 py-2 border rounded-md shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         >
-                          <option value="">Add Employee</option>
+                          <option value="">Select Employee</option>
                           {getDisplayEmployees().map(emp => {
                             const isAssignedElsewhere = isEmployeeAssignedElsewhere(task.id, 'informed', emp.id);
                             const isAlreadySelected = getSelectedEmployeesArray(task.id, 'informed').includes(emp.id);
@@ -2645,7 +2661,7 @@ const RACIAssignment = () => {
                    fontSize: '0.875rem'
                  }}
                >
-                 <option value="">Add Employee</option>
+                 <option value="">Select Employee</option>
                  {getDisplayEmployees().map(emp => {
                    // Exclude if already chosen in main selection OR in current row OR in other hierarchy rows
                    const inMainSelection = getSelectedEmployeesArray(task.id, role).includes(emp.id);
@@ -2796,7 +2812,7 @@ const RACIAssignment = () => {
             width: '100%'
           }}
         >
-          + Add another limit
+          + Select Another Employee
         </button>
       </>
     );
@@ -3414,7 +3430,7 @@ const RACIAssignment = () => {
   };
 
   return (
-    <div>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
       <div className="page-header">
         <h1>RACI Assignment</h1>
         <p>Create responsibility matrix for events</p>
@@ -3779,7 +3795,7 @@ const RACIAssignment = () => {
                                   cursor: isEditingDisabled() ? 'not-allowed' : 'pointer'
                                 }}
                               >
-                                <option value="">Add Employee</option>
+                                <option value="">Select Employee</option>
                                 {loadingEmployees ? (
                                   <option disabled>Loading employees...</option>
                                 ) : (
@@ -3906,7 +3922,7 @@ const RACIAssignment = () => {
                                   cursor: isEditingDisabled() ? 'not-allowed' : 'pointer'
                                 }}
                               >
-                                <option value="">Add Employee</option>
+                                <option value="">Select Employee</option>
                                 {loadingEmployees ? (
                                   <option disabled>Loading employees...</option>
                                 ) : (
@@ -4032,7 +4048,7 @@ const RACIAssignment = () => {
                                   cursor: isEditingDisabled() ? 'not-allowed' : 'pointer'
                                 }}
                               >
-                                <option value="">Add Employee</option>
+                                <option value="">Select Employee</option>
                                 {loadingEmployees ? (
                                   <option disabled>Loading employees...</option>
                                 ) : (
@@ -4158,7 +4174,7 @@ const RACIAssignment = () => {
                                   cursor: isEditingDisabled() ? 'not-allowed' : 'pointer'
                                 }}
                               >
-                                <option value="">Add Employee</option>
+                                <option value="">Select Employee</option>
                                 {loadingEmployees ? (
                                   <option disabled>Loading employees...</option>
                                 ) : (

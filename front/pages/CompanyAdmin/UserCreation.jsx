@@ -7,7 +7,8 @@ const UserCreation = () => {
     email: '',
     phone: '',
     employeeId: '',
-    role: 'user'
+    role: 'user',
+    division: ''
   });
 
   const handleInputChange = (e) => {
@@ -94,6 +95,23 @@ const UserCreation = () => {
                 placeholder="Enter employee ID"
               />
             </div>
+            
+            {/* Division dropdown */}
+            <div className="form-group">
+              <label htmlFor="division">Division</label>
+              <select
+                id="division"
+                name="division"
+                value={userData.division}
+                onChange={handleInputChange}
+              >
+                <option value="">Select Division</option>
+                <option value="Plates & Chemicals (P&C)">Plates & Chemicals (P&C)</option>
+                <option value="Digital Print Media (DPM)">Digital Print Media (DPM)</option>
+                <option value="Trading">Trading</option>
+              </select>
+            </div>
+            
             <div className="form-group">
               <label htmlFor="role">Role</label>
               <select

@@ -1,5 +1,97 @@
 const db = require('../config/db');
 const logger = require('../utils/logger');
+const { generateS3Url } = require('../utils/s3Utils');
+
+// @desc    Get website admin dashboard data
+// @route   GET /api/dashboard/website-admin
+// @access  Private (website_admin)
+exports.getWebsiteAdminDashboard = async (req, res, next) => {
+  try {
+    // Get all companies with their logos and project logos
+    const companiesQuery = `
+      SELECT c.company_id, c.name, c.logo_url, c.domain, c.industry, c.size, c.pan_id, c.project_name, c.project_logo, c.created_at, c.updated_at,
+      COUNT(u.user_id) FILTER (WHERE u.role = 'company_admin') as admins_count,
+      COUNT(u.user_id) as total_users
+      FROM companies c
+      LEFT JOIN users u ON c.company_id = u.company_id
+      GROUP BY c.company_id
+      ORDER BY c.created_at DESC
+      LIMIT 10
+    `;
+    
+    const companiesResult = await db.query(companiesQuery);
+    const companies = companiesResult.rows.map(company => ({
+      id: company.company_id,
+      name: company.name,
+      logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
+      domain: company.domain,
+      industry: company.industry,
+      size: company.size,
+      panId: company.pan_id,
+      projectName: company.project_name,
+      projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null,
+      adminsCount: parseInt(company.admins_count),
+      totalUsers: parseInt(company.total_users),
+      createdAt: company.created_at,
+      updatedAt: company.updated_at
+    }));
+
+    // Get overall statistics
+    const statsQuery = `
+      SELECT 
+        COUNT(DISTINCT c.company_id) as total_companies,
+        COUNT(DISTINCT u.user_id) as total_users,
+        COUNT(DISTINCT u.user_id) FILTER (WHERE u.role = 'company_admin') as total_admins,
+        COUNT(DISTINCT u.user_id) FILTER (WHERE u.role = 'hod') as total_hods,
+        COUNT(DISTINCT u.user_id) FILTER (WHERE u.role = 'user') as total_regular_users
+      FROM companies c
+      LEFT JOIN users u ON c.company_id = u.company_id
+    `;
+    
+    const statsResult = await db.query(statsQuery);
+    const stats = statsResult.rows[0];
+
+    // Get recent company deletion requests
+    const deletionRequestsQuery = `
+      SELECT cdr.request_id, cdr.status, cdr.reason, cdr.created_at,
+             c.name as company_name, c.logo_url as company_logo,
+             wa.full_name as requested_by_name
+      FROM company_deletion_requests cdr
+      JOIN companies c ON cdr.company_id = c.company_id
+      LEFT JOIN website_admins wa ON cdr.requested_by = wa.admin_id
+      ORDER BY cdr.created_at DESC
+      LIMIT 5
+    `;
+    
+    const deletionRequestsResult = await db.query(deletionRequestsQuery);
+    const deletionRequests = deletionRequestsResult.rows.map(request => ({
+      id: request.request_id,
+      status: request.status,
+      reason: request.reason,
+      createdAt: request.created_at,
+      company: {
+        name: request.company_name,
+        logoUrl: request.company_logo ? generateS3Url(request.company_logo) : null
+      },
+      requestedBy: request.requested_by_name
+    }));
+
+    res.status(200).json({
+      companies,
+      stats: {
+        totalCompanies: parseInt(stats.total_companies),
+        totalUsers: parseInt(stats.total_users),
+        totalAdmins: parseInt(stats.total_admins),
+        totalHods: parseInt(stats.total_hods),
+        totalRegularUsers: parseInt(stats.total_regular_users)
+      },
+      deletionRequests
+    });
+  } catch (error) {
+    logger.error(`Error getting website admin dashboard: ${error.message}`);
+    next(error);
+  }
+};
 
 // @desc    Get company admin dashboard data
 // @route   GET /api/dashboard/company-admin
@@ -8,9 +100,9 @@ exports.getCompanyAdminDashboard = async (req, res, next) => {
   try {
     const companyId = req.user.company_id;
     
-    // Get company details
+    // Get company details including project logo
     const companyResult = await db.query(
-      'SELECT company_id, name, logo_url, domain, industry, size, created_at, updated_at FROM companies WHERE company_id = $1',
+      'SELECT company_id, name, logo_url, domain, industry, size, pan_id, project_name, project_logo, created_at, updated_at FROM companies WHERE company_id = $1',
       [companyId]
     );
     
@@ -22,6 +114,14 @@ exports.getCompanyAdminDashboard = async (req, res, next) => {
     }
     
     const company = companyResult.rows[0];
+    
+    // Get company admin user details for profile picture
+    const adminUserResult = await db.query(
+      'SELECT user_id, full_name, email, photo FROM users WHERE company_id = $1 AND role = $2 LIMIT 1',
+      [companyId, 'company_admin']
+    );
+    
+    const adminUser = adminUserResult.rows[0] || null;
     
     // Get user statistics by role
     const userStatsQuery = `
@@ -46,9 +146,9 @@ exports.getCompanyAdminDashboard = async (req, res, next) => {
     const eventStatsQuery = `
       SELECT 
         COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE e.approval_status = 'pending') AS pending,
-        COUNT(*) FILTER (WHERE e.approval_status = 'approved') AS approved,
-        COUNT(*) FILTER (WHERE e.approval_status = 'rejected') AS rejected
+        COUNT(*) FILTER (WHERE e.approval_status = 'PENDING') AS pending,
+        COUNT(*) FILTER (WHERE e.approval_status = 'APPROVED') AS approved,
+        COUNT(*) FILTER (WHERE e.approval_status = 'REJECTED') AS rejected
       FROM events e
       JOIN departments d ON e.department_id = d.department_id
       WHERE d.company_id = $1
@@ -80,13 +180,22 @@ exports.getCompanyAdminDashboard = async (req, res, next) => {
       company: {
         id: company.company_id,
         name: company.name,
-        logoUrl: company.logo_url,
+        logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
         domain: company.domain,
         industry: company.industry,
         size: company.size,
+        panId: company.pan_id,
+        projectName: company.project_name,
+        projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null,
         createdAt: company.created_at,
         updatedAt: company.updated_at
       },
+      adminUser: adminUser ? {
+        id: adminUser.user_id,
+        name: adminUser.full_name,
+        email: adminUser.email,
+        profilePicture: adminUser.photo ? generateS3Url(adminUser.photo) : null
+      } : null,
       stats: {
         users: {
           total: parseInt(userStats.total),
@@ -118,9 +227,9 @@ exports.getHodDashboard = async (req, res, next) => {
     const userId = req.user.user_id;
     const companyId = req.user.company_id;
     
-    // Get department information
+    // Get department information with company logos
     const deptQuery = `
-      SELECT d.department_id, d.name, c.company_id, c.name as company_name
+      SELECT d.department_id, d.name, c.company_id, c.name as company_name, c.logo_url, c.project_name, c.project_logo
       FROM departments d
       JOIN companies c ON d.company_id = c.company_id
       WHERE d.hod_id = $1
@@ -140,7 +249,10 @@ exports.getHodDashboard = async (req, res, next) => {
       name: deptResult.rows[0].name,
       company: {
         id: deptResult.rows[0].company_id,
-        name: deptResult.rows[0].company_name
+        name: deptResult.rows[0].company_name,
+        logoUrl: deptResult.rows[0].logo_url ? generateS3Url(deptResult.rows[0].logo_url) : null,
+        projectName: deptResult.rows[0].project_name,
+        projectLogo: deptResult.rows[0].project_logo ? generateS3Url(deptResult.rows[0].project_logo) : null
       }
     };
     
@@ -153,9 +265,9 @@ exports.getHodDashboard = async (req, res, next) => {
     const eventStatsQuery = `
       SELECT 
         COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE approval_status = 'pending') AS pending,
-        COUNT(*) FILTER (WHERE approval_status = 'approved') AS approved,
-        COUNT(*) FILTER (WHERE approval_status = 'rejected') AS rejected
+        COUNT(*) FILTER (WHERE approval_status = 'PENDING') AS pending,
+        COUNT(*) FILTER (WHERE approval_status = 'APPROVED') AS approved,
+        COUNT(*) FILTER (WHERE approval_status = 'REJECTED') AS rejected
       FROM events
       WHERE department_id = $1
     `;
@@ -186,7 +298,7 @@ exports.getHodDashboard = async (req, res, next) => {
     const pendingApprovalsQuery = `
       SELECT event_id, name, created_at
       FROM events
-      WHERE department_id = $1 AND approval_status = 'pending'
+      WHERE department_id = $1 AND approval_status = 'PENDING'
       ORDER BY created_at ASC
     `;
     
@@ -223,14 +335,25 @@ exports.getHodDashboard = async (req, res, next) => {
 exports.getUserDashboard = async (req, res, next) => {
   try {
     const userId = req.user.user_id;
+    const companyId = req.user.company_id;
+    
+    // Get company details including logos
+    const companyQuery = `
+      SELECT c.company_id, c.name, c.logo_url, c.project_name, c.project_logo
+      FROM companies c
+      WHERE c.company_id = $1
+    `;
+    
+    const companyResult = await db.query(companyQuery, [companyId]);
+    const company = companyResult.rows[0] || null;
     
     // Get events statistics for user's events
     const eventStatsQuery = `
       SELECT 
         COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE e.approval_status = 'pending') AS pending,
-        COUNT(*) FILTER (WHERE e.approval_status = 'approved') AS approved,
-        COUNT(*) FILTER (WHERE e.approval_status = 'rejected') AS rejected
+        COUNT(*) FILTER (WHERE e.approval_status = 'PENDING') AS pending,
+        COUNT(*) FILTER (WHERE e.approval_status = 'APPROVED') AS approved,
+        COUNT(*) FILTER (WHERE e.approval_status = 'REJECTED') AS rejected
       FROM events e
       JOIN event_trackers et ON e.event_id = et.event_id
       WHERE et.user_id = $1
@@ -284,6 +407,13 @@ exports.getUserDashboard = async (req, res, next) => {
     });
     
     res.status(200).json({
+      company: company ? {
+        id: company.company_id,
+        name: company.name,
+        logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
+        projectName: company.project_name,
+        projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null
+      } : null,
       stats: {
         events: {
           total: parseInt(eventStats.total),

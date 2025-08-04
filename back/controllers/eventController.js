@@ -2,22 +2,38 @@ const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const { generateS3Url, deleteFileFromS3, extractS3Key } = require('../utils/s3Utils');
 
 // @desc    Create a new event
 // @route   POST /api/events
 // @access  Private (company-admin or HOD)
 exports.createEvent = async (req, res, next) => {
   try {
-    const { name, description, departmentId, employees, tasks, priority, eventType, status } = req.body;
+    const { name, description, division, departmentId, employees, tasks, priority, eventType, status, kpi } = req.body;
+    
+    // Enhanced debug logging for KPI field
+    console.log('=== DEBUG: KPI Field ===');
+    console.log('req.body:', req.body);
+    console.log('req.body keys:', Object.keys(req.body));
+    console.log('kpi value:', kpi);
+    console.log('kpi type:', typeof kpi);
+    console.log('kpi === "KPI":', kpi === "KPI");
+    console.log('kpi === "Non KPI":', kpi === "Non KPI");
+    console.log('kpi === null:', kpi === null);
+    console.log('kpi === undefined:', kpi === undefined);
+    console.log('kpi === "":', kpi === "");
+    console.log('=======================');
+    
     const createdBy = req.user.user_id;
     let documentPath = null;
 
     // Default approval status if not provided
-    const approvalStatus = status || 'not_send_for_approval';
+    const approvalStatus = status || 'PENDING';
 
     // Handle document upload
     if (req.file) {
-      documentPath = `/uploads/${req.file.filename}`;
+      // For S3, the file location is stored as the S3 key
+      documentPath = req.file.key;
     }
 
     // Check if department exists
@@ -39,13 +55,22 @@ exports.createEvent = async (req, res, next) => {
 
       // Create event
       const result = await db.query(
-        `INSERT INTO events (name, description, priority, event_type, department_id, hod_id, created_by, document_path, approval_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING event_id, name, description, priority, event_type, department_id, hod_id, created_by, document_path, approval_status, created_at`,
-        [name, description, priority || null, eventType || null, departmentId, hodId, createdBy, documentPath, approvalStatus]
+        `INSERT INTO events (name, description, division, priority, event_type, department_id, hod_id, created_by, document_path, approval_status, kpi)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING event_id, name, description, division, priority, event_type, department_id, hod_id, created_by, document_path, approval_status, kpi, created_at`,
+        [name, description, division || null, priority || null, eventType || null, departmentId, hodId, createdBy, documentPath, approvalStatus, (kpi && kpi.trim() !== '') ? kpi : null]
       );
 
       const event = result.rows[0];
+      
+      // Enhanced debug logging for inserted event
+      console.log('=== DEBUG: Inserted Event ===');
+      console.log('Inserted event kpi:', event.kpi);
+      console.log('Inserted event kpi type:', typeof event.kpi);
+      console.log('Inserted event kpi === "KPI":', event.kpi === "KPI");
+      console.log('Inserted event kpi === "Non KPI":', event.kpi === "Non KPI");
+      console.log('Inserted event kpi === null:', event.kpi === null);
+      console.log('============================');
 
       // Get department details
       const departmentResult = await db.query(
@@ -155,8 +180,10 @@ exports.createEvent = async (req, res, next) => {
         id: event.event_id,
         name: event.name,
         description: event.description,
+        division: event.division,
         priority: event.priority,
         eventType: event.event_type,
+        kpi: event.kpi,
         department,
         hod,
         documents,
@@ -196,7 +223,7 @@ exports.getEvents = async (req, res, next) => {
 
     // Build query with filters
     let query = `
-      SELECT e.event_id, e.name, e.priority, e.event_type, e.department_id, e.approval_status, e.created_at,
+      SELECT e.event_id, e.name, e.division, e.priority, e.event_type, e.kpi, e.department_id, e.approval_status, e.created_at,
       d.name as department_name
       FROM events e
       LEFT JOIN departments d ON e.department_id = d.department_id
@@ -213,7 +240,7 @@ exports.getEvents = async (req, res, next) => {
 
     if (status) {
       query += ` AND e.approval_status = $${paramIndex++}`;
-      queryParams.push(status);
+      queryParams.push(status.toUpperCase());
     }
 
     // Add sorting and pagination
@@ -239,7 +266,7 @@ exports.getEvents = async (req, res, next) => {
 
     if (status) {
       countQuery += ` AND e.approval_status = $${countParamIndex++}`;
-      countParams.push(status);
+      countParams.push(status.toUpperCase());
     }
 
     const countResult = await db.query(countQuery, countParams);
@@ -250,8 +277,10 @@ exports.getEvents = async (req, res, next) => {
     const events = rows.map(event => ({
       id: event.event_id,
       name: event.name,
+      division: event.division,
       priority: event.priority,
       eventType: event.event_type,
+      kpi: event.kpi,
       department: {
         id: event.department_id,
         name: event.department_name
@@ -280,7 +309,7 @@ exports.getEventById = async (req, res, next) => {
 
     // Get event details with related data
     const eventResult = await db.query(
-      `SELECT e.event_id, e.name, e.description, e.priority, e.event_type, e.department_id, e.hod_id, 
+      `SELECT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi, e.department_id, e.hod_id, 
       e.document_path, e.approval_status, e.rejection_reason, e.created_at,
       d.name as department_name,
       u.full_name as hod_name,
@@ -320,7 +349,7 @@ exports.getEventById = async (req, res, next) => {
     const documents = event.document_path ? [{
       id: 1, // Just a placeholder ID
       name: path.basename(event.document_path),
-      url: event.document_path
+      url: generateS3Url(event.document_path)
     }] : [];
 
     // Get event tasks
@@ -343,8 +372,10 @@ exports.getEventById = async (req, res, next) => {
       id: event.event_id,
       name: event.name,
       description: event.description,
+      division: event.division,
       priority: event.priority,
       eventType: event.event_type,
+      kpi: event.kpi,
       department: {
         id: event.department_id,
         name: event.department_name
@@ -374,7 +405,14 @@ exports.getEventById = async (req, res, next) => {
 exports.updateEvent = async (req, res, next) => {
   try {
     const eventId = req.params.id;
-    const { name, description, departmentId, employees, priority, eventType } = req.body;
+    const { name, description, division, departmentId, employees, priority, eventType, kpi } = req.body;
+    
+    // Debug logging for KPI field in update
+    console.log('=== DEBUG: Update KPI Field ===');
+    console.log('req.body:', req.body);
+    console.log('kpi value:', kpi);
+    console.log('kpi type:', typeof kpi);
+    console.log('=============================');
 
     // Check if event exists
     const eventCheck = await db.query(
@@ -411,14 +449,20 @@ exports.updateEvent = async (req, res, next) => {
     // Handle document upload if provided
     let documentPath = event.document_path;
     if (req.file) {
-      // Delete previous document if it exists
+      // Delete previous document from S3 if it exists
       if (documentPath) {
-        const oldDocPath = path.join(__dirname, '..', documentPath);
-        if (fs.existsSync(oldDocPath)) {
-          fs.unlinkSync(oldDocPath);
+        try {
+          const s3Key = extractS3Key(documentPath);
+          if (s3Key) {
+            await deleteFileFromS3(s3Key);
+          }
+        } catch (error) {
+          console.error('Error deleting old file from S3:', error);
+          // Continue with the update even if deletion fails
         }
       }
-      documentPath = `/uploads/${req.file.filename}`;
+      // Store the new S3 key
+      documentPath = req.file.key;
     }
 
     // Update event
@@ -426,16 +470,23 @@ exports.updateEvent = async (req, res, next) => {
       `UPDATE events
        SET name = COALESCE($1, name),
            description = COALESCE($2, description),
-           department_id = COALESCE($3, department_id),
-           document_path = COALESCE($4, document_path),
-           priority = COALESCE($5, priority),
-           event_type = COALESCE($6, event_type)
-       WHERE event_id = $7
-       RETURNING event_id, name, description, department_id, hod_id, document_path, approval_status`,
-      [name, description, departmentId, documentPath, priority, eventType, eventId]
+           division = COALESCE($3, division),
+           department_id = COALESCE($4, department_id),
+           document_path = COALESCE($5, document_path),
+           priority = COALESCE($6, priority),
+           event_type = COALESCE($7, event_type),
+           kpi = COALESCE($8, kpi)
+       WHERE event_id = $9
+       RETURNING event_id, name, description, division, department_id, hod_id, document_path, approval_status, kpi`,
+      [name, description, division, departmentId, documentPath, priority, eventType, kpi, eventId]
     );
 
     const updatedEvent = result.rows[0];
+    
+    // Debug logging for updated event
+    console.log('=== DEBUG: Updated Event ===');
+    console.log('Updated event kpi:', updatedEvent.kpi);
+    console.log('===========================');
 
     // Handle employee assignments if provided
     if (employees && Array.isArray(employees)) {
@@ -460,11 +511,13 @@ exports.updateEvent = async (req, res, next) => {
 
     res.status(200).json(fullEventResult);
   } catch (error) {
-    // If there was a file upload and an error occurs, clean up the uploaded file
+    // If there was a file upload and an error occurs, clean up the uploaded file from S3
     if (req.file) {
-      fs.unlink(req.file.path, err => {
-        if (err) console.error('Failed to delete uploaded file:', err);
-      });
+      try {
+        await deleteFileFromS3(req.file.key);
+      } catch (err) {
+        console.error('Failed to delete uploaded file from S3:', err);
+      }
     }
     next(error);
   }
@@ -509,11 +562,16 @@ exports.deleteEvent = async (req, res, next) => {
       });
     }
 
-    // Delete document file if it exists
+    // Delete document file from S3 if it exists
     if (event.document_path) {
-      const docPath = path.join(__dirname, '..', event.document_path);
-      if (fs.existsSync(docPath)) {
-        fs.unlinkSync(docPath);
+      try {
+        const s3Key = extractS3Key(event.document_path);
+        if (s3Key) {
+          await deleteFileFromS3(s3Key);
+        }
+      } catch (error) {
+        console.error('Error deleting file from S3:', error);
+        // Continue with deletion even if file deletion fails
       }
     }
 
@@ -584,7 +642,7 @@ exports.submitEvent = async (req, res, next) => {
     // Update event status
     await db.query(
       'UPDATE events SET approval_status = $1 WHERE event_id = $2',
-      ['pending', eventId]
+      ['PENDING', eventId]
     );
 
     // TODO: Send notification to approver
@@ -592,7 +650,7 @@ exports.submitEvent = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Event submitted for approval',
-      status: 'pending'
+      status: 'PENDING'
     });
   } catch (error) {
     next(error);
@@ -644,7 +702,7 @@ exports.approveEvent = async (req, res, next) => {
            rejection_reason = $2,
            approved_by = $3
        WHERE event_id = $4`,
-      [approved ? 'approved' : 'rejected', comments, req.user.user_id, eventId]
+      [approved ? 'APPROVED' : 'REJECTED', comments, req.user.user_id, eventId]
     );
 
     // TODO: Send notification to creator
@@ -652,7 +710,165 @@ exports.approveEvent = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: approved ? 'Event approved' : 'Event rejected',
-      status: approved ? 'approved' : 'rejected'
+      status: approved ? 'APPROVED' : 'REJECTED'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get approved events ready for RACI assignment (for company admins)
+// @route   GET /api/events/approved-for-raci
+// @access  Private (company_admin)
+exports.getApprovedEventsForRaci = async (req, res, next) => {
+  try {
+    const companyId = req.user.company_id;
+    const { page = 1, limit = 10 } = req.query;
+    
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // Get approved events that don't have RACI assignments yet
+    const query = `
+      SELECT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi, 
+             e.department_id, e.approval_status, e.created_at,
+             d.name as department_name,
+             COUNT(t.task_id) as task_count,
+             COUNT(ra.raci_id) as raci_assignment_count
+      FROM events e
+      LEFT JOIN departments d ON e.department_id = d.department_id
+      LEFT JOIN tasks t ON e.event_id = t.event_id
+      LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+      WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+      GROUP BY e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi, 
+               e.department_id, e.approval_status, e.created_at, d.name
+      HAVING COUNT(ra.raci_id) = 0
+      ORDER BY e.created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const { rows } = await db.query(query, [companyId, limit, offset]);
+
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(DISTINCT e.event_id) as total
+      FROM events e
+      LEFT JOIN departments d ON e.department_id = d.department_id
+      LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+      WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+      GROUP BY e.event_id
+      HAVING COUNT(ra.raci_id) = 0
+    `;
+
+    const countResult = await db.query(countQuery, [companyId]);
+    const totalItems = countResult.rows.length;
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Format the response
+    const events = rows.map(event => ({
+      id: event.event_id,
+      name: event.name,
+      description: event.description,
+      division: event.division,
+      priority: event.priority,
+      eventType: event.event_type,
+      kpi: event.kpi,
+      department: {
+        id: event.department_id,
+        name: event.department_name
+      },
+      status: event.approval_status,
+      taskCount: parseInt(event.task_count),
+      raciAssignmentCount: parseInt(event.raci_assignment_count),
+      createdAt: event.created_at
+    }));
+
+    res.status(200).json({
+      success: true,
+      totalItems,
+      totalPages,
+      currentPage: parseInt(page),
+      events
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all approved events for RACI assignment view (for company admins)
+// @route   GET /api/events/approved-for-raci-view
+// @access  Private (company_admin)
+exports.getApprovedEventsForRaciView = async (req, res, next) => {
+  try {
+    const companyId = req.user.company_id;
+    const { page = 1, limit = 10 } = req.query;
+    
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // Get all approved events with RACI assignment status
+    const query = `
+      SELECT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi, 
+             e.department_id, e.approval_status, e.created_at,
+             d.name as department_name,
+             COUNT(t.task_id) as task_count,
+             COUNT(ra.raci_id) as raci_assignment_count,
+             CASE 
+               WHEN COUNT(ra.raci_id) = 0 THEN 'NO_RACI'
+               WHEN COUNT(ra.raci_id) > 0 THEN 'HAS_RACI'
+               ELSE 'NO_RACI'
+             END as raci_status
+      FROM events e
+      LEFT JOIN departments d ON e.department_id = d.department_id
+      LEFT JOIN tasks t ON e.event_id = t.event_id
+      LEFT JOIN raci_assignments ra ON e.event_id = ra.event_id
+      WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+      GROUP BY e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi, 
+               e.department_id, e.approval_status, e.created_at, d.name
+      ORDER BY e.created_at DESC
+      LIMIT $2 OFFSET $3
+    `;
+
+    const { rows } = await db.query(query, [companyId, limit, offset]);
+
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(DISTINCT e.event_id) as total
+      FROM events e
+      LEFT JOIN departments d ON e.department_id = d.department_id
+      WHERE d.company_id = $1 AND e.approval_status = 'APPROVED'
+    `;
+
+    const countResult = await db.query(countQuery, [companyId]);
+    const totalItems = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    // Format the response
+    const events = rows.map(event => ({
+      id: event.event_id,
+      name: event.name,
+      description: event.description,
+      division: event.division,
+      priority: event.priority,
+      eventType: event.event_type,
+      kpi: event.kpi,
+      department: {
+        id: event.department_id,
+        name: event.department_name
+      },
+      status: event.approval_status,
+      taskCount: parseInt(event.task_count),
+      raciAssignmentCount: parseInt(event.raci_assignment_count),
+      raciStatus: event.raci_status,
+      createdAt: event.created_at
+    }));
+
+    res.status(200).json({
+      success: true,
+      totalItems,
+      totalPages,
+      currentPage: parseInt(page),
+      events
     });
   } catch (error) {
     next(error);
@@ -662,7 +878,7 @@ exports.approveEvent = async (req, res, next) => {
 // Helper function to get full event details
 async function getFullEventDetails(eventId) {
   const eventResult = await db.query(
-    `SELECT e.event_id, e.name, e.description, e.priority, e.event_type, e.department_id, e.hod_id, 
+    `SELECT e.event_id, e.name, e.description, e.division, e.priority, e.event_type, e.kpi, e.department_id, e.hod_id, 
     e.document_path, e.approval_status, e.rejection_reason, e.created_at,
     d.name as department_name,
     u.full_name as hod_name,
@@ -699,7 +915,7 @@ async function getFullEventDetails(eventId) {
   const documents = event.document_path ? [{
     id: 1, // Just a placeholder ID
     name: path.basename(event.document_path),
-    url: event.document_path
+    url: generateS3Url(event.document_path)
   }] : [];
 
   // Get event tasks
@@ -722,8 +938,10 @@ async function getFullEventDetails(eventId) {
     id: event.event_id,
     name: event.name,
     description: event.description,
+    division: event.division,
     priority: event.priority,
     eventType: event.event_type,
+    kpi: event.kpi,
     department: {
       id: event.department_id,
       name: event.department_name

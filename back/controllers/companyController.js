@@ -2,6 +2,7 @@ const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
+const { generateS3Url, deleteFileFromS3, extractS3Key, generateCompanyFileUrl, getCompanyFileStructure, generateCompanyFileUrls } = require('../utils/s3Utils');
 
 // @desc    Create a new company
 // @route   POST /api/companies
@@ -15,22 +16,22 @@ exports.createCompany = async (req, res, next) => {
     // Handle file uploads (logo & project logo)
     if (req.files) {
       if (req.files['logo'] && req.files['logo'][0]) {
-        logoUrl = `/uploads/${req.files['logo'][0].filename}`;
+        logoUrl = req.files['logo'][0].key;
       }
       // Accept alternative field names from frontend
       else if (req.files['logoUrl'] && req.files['logoUrl'][0]) {
-        logoUrl = `/uploads/${req.files['logoUrl'][0].filename}`;
+        logoUrl = req.files['logoUrl'][0].key;
       }
       if (req.files['project_logo'] && req.files['project_logo'][0]) {
-        projectLogoUrl = `/uploads/${req.files['project_logo'][0].filename}`;
+        projectLogoUrl = req.files['project_logo'][0].key;
       }
       // Accept alternative field names from frontend
       else if (req.files['projectLogo'] && req.files['projectLogo'][0]) {
-        projectLogoUrl = `/uploads/${req.files['projectLogo'][0].filename}`;
+        projectLogoUrl = req.files['projectLogo'][0].key;
       }
     } else if (req.file) {
       // Backwards compatibility: single 'logo' file field
-      logoUrl = `/uploads/${req.file.filename}`;
+      logoUrl = req.file.key;
     }
 
     // Create company
@@ -43,24 +44,45 @@ exports.createCompany = async (req, res, next) => {
 
     const company = result.rows[0];
 
+    // Generate proper file URLs and structure
+    const fileStructure = getCompanyFileStructure(company.name);
+    
+    // Generate accurate file URLs for frontend
+    const fileUrls = generateCompanyFileUrls(company.name, {
+      logos: company.logo_url ? company.logo_url.split('/').pop() : null,
+      projectLogos: company.project_logo ? company.project_logo.split('/').pop() : null
+    });
+    
     res.status(201).json({
       id: company.company_id,
       name: company.name,
-      logoUrl: company.logo_url,
+      logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
       domain: company.domain,
       industry: company.industry,
       size: company.size,
       panId: company.pan_id,
       projectName: company.project_name,
-      projectLogo: company.project_logo,
+      projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null,
+      fileStructure: {
+        logos: fileStructure.logos,
+        photos: fileStructure.photos,
+        documents: fileStructure.documents,
+        images: fileStructure.images
+      },
+      fileUrls: {
+        logo: fileUrls.logos,
+        projectLogo: fileUrls.projectLogos
+      },
       createdAt: company.created_at
     });
   } catch (error) {
-    // If there was a file upload and an error occurs, clean up the uploaded file
+    // If there was a file upload and an error occurs, clean up the uploaded file from S3
     if (req.file) {
-      fs.unlink(req.file.path, err => {
-        if (err) console.error('Failed to delete uploaded file:', err);
-      });
+      try {
+        await deleteFileFromS3(req.file.key);
+      } catch (err) {
+        console.error('Failed to delete uploaded file from S3:', err);
+      }
     }
     next(error);
   }
@@ -99,20 +121,40 @@ exports.getCompanies = async (req, res, next) => {
     const totalPages = Math.ceil(totalItems / limit);
 
     // Format response
-    const companies = rows.map(company => ({
-      id: company.company_id,
-      name: company.name,
-      logoUrl: company.logo_url,
-      domain: company.domain,
-      industry: company.industry,
-      size: company.size,
-      panId: company.pan_id,
-      projectName: company.project_name,
-      projectLogo: company.project_logo,
-      adminsCount: parseInt(company.admins_count),
-      createdAt: company.created_at,
-      updatedAt: company.updated_at
-    }));
+    const companies = rows.map(company => {
+      const fileStructure = getCompanyFileStructure(company.name);
+      
+      // Generate accurate file URLs for frontend
+      const fileUrls = generateCompanyFileUrls(company.name, {
+        logos: company.logo_url ? company.logo_url.split('/').pop() : null,
+        projectLogos: company.project_logo ? company.project_logo.split('/').pop() : null
+      });
+      
+      return {
+        id: company.company_id,
+        name: company.name,
+        logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
+        domain: company.domain,
+        industry: company.industry,
+        size: company.size,
+        panId: company.pan_id,
+        projectName: company.project_name,
+        projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null,
+        adminsCount: parseInt(company.admins_count),
+        fileStructure: {
+          logos: fileStructure.logos,
+          photos: fileStructure.photos,
+          documents: fileStructure.documents,
+          images: fileStructure.images
+        },
+        fileUrls: {
+          logo: fileUrls.logos,
+          projectLogo: fileUrls.projectLogos
+        },
+        createdAt: company.created_at,
+        updatedAt: company.updated_at
+      };
+    });
 
     res.status(200).json({
       totalItems,
@@ -158,16 +200,35 @@ exports.getCompanyById = async (req, res, next) => {
       notifyOnRejection: true
     };
 
+    // Generate proper file URLs and structure
+    const fileStructure = getCompanyFileStructure(company.name);
+    
+    // Generate accurate file URLs for frontend
+    const fileUrls = generateCompanyFileUrls(company.name, {
+      logos: company.logo_url ? company.logo_url.split('/').pop() : null,
+      projectLogos: company.project_logo ? company.project_logo.split('/').pop() : null
+    });
+    
     res.status(200).json({
       id: company.company_id,
       name: company.name,
-      logoUrl: company.logo_url,
+      logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
       domain: company.domain,
       industry: company.industry,
       size: company.size,
       panId: company.pan_id,
       projectName: company.project_name,
-      projectLogo: company.project_logo,
+      projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null,
+      fileStructure: {
+        logos: fileStructure.logos,
+        photos: fileStructure.photos,
+        documents: fileStructure.documents,
+        images: fileStructure.images
+      },
+      fileUrls: {
+        logo: fileUrls.logos,
+        projectLogo: fileUrls.projectLogos
+      },
       settings,
       createdAt: company.created_at,
       updatedAt: company.updated_at
@@ -235,16 +296,35 @@ exports.getMyCompany = async (req, res, next) => {
       notifyOnRejection: true
     };
 
+    // Generate proper file URLs and structure
+    const fileStructure = getCompanyFileStructure(company.name);
+    
+    // Generate accurate file URLs for frontend
+    const fileUrls = generateCompanyFileUrls(company.name, {
+      logos: company.logo_url ? company.logo_url.split('/').pop() : null,
+      projectLogos: company.project_logo ? company.project_logo.split('/').pop() : null
+    });
+    
     res.status(200).json({
       id: company.company_id,
       name: company.name,
-      logoUrl: company.logo_url,
+      logoUrl: company.logo_url ? generateS3Url(company.logo_url) : null,
       domain: company.domain,
       industry: company.industry,
       size: company.size,
       panId: company.pan_id,
       projectName: company.project_name,
-      projectLogo: company.project_logo,
+      projectLogo: company.project_logo ? generateS3Url(company.project_logo) : null,
+      fileStructure: {
+        logos: fileStructure.logos,
+        photos: fileStructure.photos,
+        documents: fileStructure.documents,
+        images: fileStructure.images
+      },
+      fileUrls: {
+        logo: fileUrls.logos,
+        projectLogo: fileUrls.projectLogos
+      },
       settings,
       createdAt: company.created_at,
       updatedAt: company.updated_at,
@@ -286,34 +366,46 @@ exports.updateCompany = async (req, res, next) => {
     // Handle file uploads (logo & project logo)
     if (req.files) {
       if (req.files['logo'] && req.files['logo'][0]) {
-        // Delete old logo if exists
+        // Delete old logo from S3 if exists
         if (logoUrl) {
-          const oldLogoPath = path.join(__dirname, '..', logoUrl);
-          if (fs.existsSync(oldLogoPath)) {
-            fs.unlinkSync(oldLogoPath);
+          try {
+            const s3Key = extractS3Key(logoUrl);
+            if (s3Key) {
+              await deleteFileFromS3(s3Key);
+            }
+          } catch (error) {
+            console.error('Error deleting old logo from S3:', error);
           }
         }
-        logoUrl = `/uploads/${req.files['logo'][0].filename}`;
+        logoUrl = req.files['logo'][0].key;
       }
       if (req.files['project_logo'] && req.files['project_logo'][0]) {
-        // Delete old project logo if exists
+        // Delete old project logo from S3 if exists
         if (projectLogoUrl) {
-          const oldProjectLogoPath = path.join(__dirname, '..', projectLogoUrl);
-          if (fs.existsSync(oldProjectLogoPath)) {
-            fs.unlinkSync(oldProjectLogoPath);
+          try {
+            const s3Key = extractS3Key(projectLogoUrl);
+            if (s3Key) {
+              await deleteFileFromS3(s3Key);
+            }
+          } catch (error) {
+            console.error('Error deleting old project logo from S3:', error);
           }
         }
-        projectLogoUrl = `/uploads/${req.files['project_logo'][0].filename}`;
+        projectLogoUrl = req.files['project_logo'][0].key;
       }
     } else if (req.file) {
       // Backwards compatibility: single 'logo' field
       if (logoUrl) {
-        const oldLogoPath = path.join(__dirname, '..', logoUrl);
-        if (fs.existsSync(oldLogoPath)) {
-          fs.unlinkSync(oldLogoPath);
+        try {
+          const s3Key = extractS3Key(logoUrl);
+          if (s3Key) {
+            await deleteFileFromS3(s3Key);
+          }
+        } catch (error) {
+          console.error('Error deleting old logo from S3:', error);
         }
       }
-      logoUrl = `/uploads/${req.file.filename}`;
+      logoUrl = req.file.key;
     }
 
     // Update company
@@ -348,23 +440,25 @@ exports.updateCompany = async (req, res, next) => {
     res.status(200).json({
       id: company.company_id,
       name: company.name,
-      logoUrl: company.logo_url,
+      logoUrl: generateS3Url(company.logo_url),
       domain: company.domain,
       industry: company.industry,
       size: company.size,
       panId: company.pan_id,
       projectName: company.project_name,
-      projectLogo: company.project_logo,
+      projectLogo: generateS3Url(company.project_logo),
       settings,
       createdAt: company.created_at,
       updatedAt: company.updated_at
     });
   } catch (error) {
-    // If there was a file upload and an error occurs, clean up the uploaded file
+    // If there was a file upload and an error occurs, clean up the uploaded file from S3
     if (req.file) {
-      fs.unlink(req.file.path, err => {
-        if (err) console.error('Failed to delete uploaded file:', err);
-      });
+      try {
+        await deleteFileFromS3(req.file.key);
+      } catch (err) {
+        console.error('Failed to delete uploaded file from S3:', err);
+      }
     }
     next(error);
   }
@@ -405,7 +499,7 @@ exports.updateCompanySettings = async (req, res, next) => {
     res.status(200).json({
       id: company.company_id,
       name: company.name,
-      logoUrl: company.logo_url,
+      logoUrl: generateS3Url(company.logo_url),
       domain: company.domain,
       industry: company.industry,
       size: company.size,
@@ -444,21 +538,29 @@ exports.deleteCompany = async (req, res, next) => {
       });
     }
 
-    // Delete company logo file if it exists
+    // Delete company logo file from S3 if it exists
     const logoUrl = companyCheck.rows[0].logo_url;
     if (logoUrl) {
-      const logoPath = path.join(__dirname, '..', logoUrl);
-      if (fs.existsSync(logoPath)) {
-        fs.unlinkSync(logoPath);
+      try {
+        const s3Key = extractS3Key(logoUrl);
+        if (s3Key) {
+          await deleteFileFromS3(s3Key);
+        }
+      } catch (error) {
+        console.error('Error deleting logo from S3:', error);
       }
     }
 
-    // Delete project logo file if it exists
+    // Delete project logo file from S3 if it exists
     const projectLogoToDelete = companyCheck.rows[0].project_logo;
     if (projectLogoToDelete) {
-      const projectLogoPath = path.join(__dirname, '..', projectLogoToDelete);
-      if (fs.existsSync(projectLogoPath)) {
-        fs.unlinkSync(projectLogoPath);
+      try {
+        const s3Key = extractS3Key(projectLogoToDelete);
+        if (s3Key) {
+          await deleteFileFromS3(s3Key);
+        }
+      } catch (error) {
+        console.error('Error deleting project logo from S3:', error);
       }
     }
 
@@ -638,20 +740,28 @@ exports.processDeletionRequest = async (req, res, next) => {
     const request = requestCheck.rows[0];
 
     if (action === 'approve') {
-      // Delete company and its associated files
+      // Delete company and its associated files from S3
       const logoUrl = request.logo_url;
       if (logoUrl) {
-        const logoPath = path.join(__dirname, '..', logoUrl);
-        if (fs.existsSync(logoPath)) {
-          fs.unlinkSync(logoPath);
+        try {
+          const s3Key = extractS3Key(logoUrl);
+          if (s3Key) {
+            await deleteFileFromS3(s3Key);
+          }
+        } catch (error) {
+          console.error('Error deleting logo from S3:', error);
         }
       }
 
       const projectLogoToDelete = request.project_logo;
       if (projectLogoToDelete) {
-        const projectLogoPath = path.join(__dirname, '..', projectLogoToDelete);
-        if (fs.existsSync(projectLogoPath)) {
-          fs.unlinkSync(projectLogoPath);
+        try {
+          const s3Key = extractS3Key(projectLogoToDelete);
+          if (s3Key) {
+            await deleteFileFromS3(s3Key);
+          }
+        } catch (error) {
+          console.error('Error deleting project logo from S3:', error);
         }
       }
 

@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import env from '../../src/config/env';
 import raciService from '../../src/services/raci.service';
 
 const RACIApprovals = ({ userData }) => {
+  const navigate = useNavigate();
   const [raciMatrices, setRaciMatrices] = useState([]);
   const [approvalHistory, setApprovalHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' or 'history'
+
+  const handleBackToDashboard = () => {
+    navigate('/user/raci-dashboard');
+  };
 
   // Fetch RACI matrices on mount or when user changes
   useEffect(() => {
@@ -821,13 +827,19 @@ const RACIApprovals = ({ userData }) => {
   };
 
   return (
-    <div className="card" style={{ marginTop: '1rem' }}>
-      <div className="card-header" style={{ borderBottom: '1px solid #e5e7eb', padding: '1rem' }}>
-        <h2 style={{ margin: 0 }}>RACI Approvals</h2>
-        <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
-          Manage RACI matrix approvals and view approval history
-        </p>
+    <div style={{ padding: '2rem', margin: '0 2rem' }}>
+      <div className="page-header" style={{ position: 'relative', marginBottom: '2rem', textAlign: 'center' }}>
+        <h1 style={{ margin: 0 }}>RACI Approvals</h1>
+        <p style={{ margin: '0.5rem 0 0 0' }}>Manage RACI matrix approvals and view approval history</p>
       </div>
+      
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <div className="card-header" style={{ borderBottom: '1px solid #e5e7eb', padding: '1rem' }}>
+          <h2 style={{ margin: 0 }}>RACI Approvals</h2>
+          <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
+            Manage RACI matrix approvals and view approval history
+          </p>
+        </div>
       
       {/* Tab Navigation */}
       <div style={{ 
@@ -1032,6 +1044,7 @@ const RACIApprovals = ({ userData }) => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

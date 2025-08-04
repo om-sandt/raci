@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, NavLink, useLocation } from 'react-router-dom';
 import apiService from '../../src/services/api';
 import authService from '../../src/services/auth.service';
+import divisionService from '../../src/services/division.service';
 import '../../styles/dashboard.scss';
 import env from '../../src/config/env';
 
@@ -18,8 +19,65 @@ const getAssetUrl = (path) => {
   return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : '/' + path}`;
 };
 
+// Move HelpModal to the very top of the file
+const HelpModal = ({ onClose, title, text }) => (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
+    background: 'rgba(0,0,0,0.3)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  }}
+    onClick={onClose}
+  >
+    <div style={{
+      background: 'white',
+      borderRadius: '10px',
+      padding: '2rem',
+      maxWidth: '420px',
+      boxShadow: '0 2px 16px rgba(0,0,0,0.18)',
+      position: 'relative',
+      cursor: 'auto'
+    }}
+      onClick={e => e.stopPropagation()}
+    >
+      <button
+        onClick={onClose}
+        style={{
+          position: 'absolute',
+          top: '10px',
+          right: '14px',
+          background: 'none',
+          border: 'none',
+          fontSize: '1.3em',
+          cursor: 'pointer',
+          color: '#888'
+        }}
+        aria-label="Close"
+      >×</button>
+      <h3 style={{ marginBottom: '1rem', color: '#4f46e5' }}>{title}</h3>
+      <div style={{ fontSize: '1.05em', color: '#222', lineHeight: '1.7' }}>{text}</div>
+    </div>
+  </div>
+);
+
 const CreateUser = () => {
   const navigate = useNavigate();
+  // Add showHelp state at the top
+  const [showNameHelp, setShowNameHelp] = useState(false);
+  const [showEmailHelp, setShowEmailHelp] = useState(false);
+  const [showRoleHelp, setShowRoleHelp] = useState(false);
+  const [showDepartmentHelp, setShowDepartmentHelp] = useState(false);
+  const [showLocationHelp, setShowLocationHelp] = useState(false);
+  const [showHodHelp, setShowHodHelp] = useState(false);
+  const [showDesignationHelp, setShowDesignationHelp] = useState(false);
+  const [showEmployeeIdHelp, setShowEmployeeIdHelp] = useState(false);
+  const [showDivisionHelp, setShowDivisionHelp] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -30,7 +88,10 @@ const CreateUser = () => {
     departmentId: '',
     companyId: '',
     location: '',  // Added location field
-    hodId: ''      // Added hodId field
+    hodId: '',     // Added hodId field
+    division: '', // Added division field
+    dob: '', // Added Date of Birth
+    doj: '' // Added Date of Joining
   });
   
   const [tempPassword, setTempPassword] = useState('');
@@ -46,34 +107,21 @@ const CreateUser = () => {
   const [loadingDesignations, setLoadingDesignations] = useState(false);  // Added loading state
   const [loadingLocations, setLoadingLocations] = useState(false);        // Added loading state
   const [loadingHODs, setLoadingHODs] = useState(false);  // Added loading state for HODs
+  const [loadingDivisions, setLoadingDivisions] = useState(false);  // Added loading state for divisions
   const [hods, setHODs] = useState([]);  // Added state for HODs
+  const [divisions, setDivisions] = useState([]);  // Added state for divisions
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  // Add expanded sections state for sidebar
-  const [expandedSections, setExpandedSections] = useState({
-    users: true, // Auto-expand the users section since we're on a user page
-    departments: false,
-    designations: false,
-    locations: false,
-    raci: false
-  });
-  
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const toggleSidebar = () => setSidebarOpen(prev => !prev);
-  
-  // Toggle sidebar sections
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
   
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {
       localStorage.removeItem('raci_auth_token');
       navigate('/auth/login');
     }
+  };
+
+  const handleBackToDashboard = () => {
+    navigate('/company-admin/dashboard');
   };
 
   // Fetch designations 
@@ -143,6 +191,21 @@ const CreateUser = () => {
       setLocations([]);
     } finally {
       setLoadingLocations(false);
+    }
+  };
+  
+  // Fetch divisions
+  const fetchDivisions = async () => {
+    try {
+      setLoadingDivisions(true);
+      const res = await divisionService.getDivisions();
+      setDivisions(res.data || []);
+      console.log('Divisions loaded successfully:', res);
+    } catch (error) {
+      console.error('Error fetching divisions:', error);
+      setDivisions([]);
+    } finally {
+      setLoadingDivisions(false);
     }
   };
 
@@ -268,10 +331,11 @@ const CreateUser = () => {
             setLoadingHODs(false);
           }
           
-          // Fetch designations and locations (these are global reference data)
+          // Fetch designations, locations and divisions
           await Promise.all([
             fetchDesignations(userData.company.id),
-            fetchLocations(userData.company.id)
+            fetchLocations(userData.company.id),
+            fetchDivisions()
           ]);
         }
         
@@ -302,28 +366,35 @@ const CreateUser = () => {
     try {
       console.log('Creating user with data:', formData);
       
-      // Convert departmentId and hodId to number if they exist
-      const payload = {
-        ...formData,
-        departmentId: formData.departmentId ? parseInt(formData.departmentId) : undefined,
-        companyId: parseInt(formData.companyId),
-        hodId: formData.hodId ? parseInt(formData.hodId) : undefined,
-      };
-      
-      // Direct fetch for better error handling
+      // Use FormData for multipart/form-data as per API spec
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name);
+      formDataToSend.append('email', formData.email);
+      formDataToSend.append('role', formData.role);
+      if (formData.designation) formDataToSend.append('designation', formData.designation);
+      if (formData.division) formDataToSend.append('division', formData.division);
+      if (formData.phone) formDataToSend.append('phone', formData.phone);
+      if (formData.employeeId) formDataToSend.append('employeeId', formData.employeeId);
+      if (formData.departmentId) formDataToSend.append('departmentId', formData.departmentId);
+      if (formData.companyId) formDataToSend.append('companyId', formData.companyId);
+      if (formData.location) formDataToSend.append('location', formData.location);
+      if (formData.hodId) formDataToSend.append('hodId', formData.hodId);
+      if (formData.dob) formDataToSend.append('dob', formData.dob);
+      if (formData.doj) formDataToSend.append('doj', formData.doj);
+      // If you have a photo upload, add it here: if (photo) formDataToSend.append('photo', photo);
+
       const token = localStorage.getItem('raci_auth_token');
       const response = await fetch(`${env.apiBaseUrl}/users`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(payload)
+        body: formDataToSend
       });
-      
+
       const responseData = await response.json();
       console.log('User creation response:', responseData);
-      
+
       if (!response.ok) {
         throw new Error(responseData.message || `API error: ${response.status}`);
       }
@@ -349,403 +420,6 @@ const CreateUser = () => {
     }
   };
   
-  const content = (
-    <div className="content-wrapper fix-wrapper">
-      <div className="page-header">
-        <h1>Create New User</h1>
-      </div>
-      
-      {/* Temporary Password Display */}
-      {showPasswordInfo && (
-        <div className="temp-password-info" style={{
-          padding: '1.5rem',
-          background: '#f0f9ff',
-          border: '1px solid #bae6fd',
-          borderRadius: '12px',
-          marginBottom: '1.5rem'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-            <span style={{ fontSize: '1.5rem', marginRight: '1rem', color: '#0284c7' }}>🔑</span>
-            <h2 style={{ margin: 0, fontWeight: '600', color: '#0284c7' }}>
-              Temporary Password Created
-            </h2>
-          </div>
-          
-          <p style={{ marginBottom: '1rem', color: '#0369a1' }}>
-            A temporary password has been generated for this user. Please share it securely with them:
-          </p>
-          
-          <div style={{
-            background: 'rgba(2, 132, 199, 0.1)',
-            padding: '0.75rem',
-            borderRadius: '4px',
-            fontFamily: 'monospace',
-            fontWeight: '600',
-            fontSize: '1.25rem',
-            letterSpacing: '0.05em',
-            color: '#0369a1',
-            textAlign: 'center',
-            marginBottom: '1rem'
-          }}>
-            {tempPassword}
-          </div>
-          
-          <p style={{ color: '#0369a1', fontWeight: '500' }}>
-            Important: The user will be prompted to change this password upon first login.
-          </p>
-          
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-            <button
-              onClick={() => navigate('/company-admin/user-management', { state: { refreshData: true } })}
-              style={{
-                padding: '0.75rem 1.25rem',
-                background: '#0284c7',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: '500',
-                cursor: 'pointer'
-              }}
-            >
-              Continue to User Management
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Error and success messages */}
-      {error && (
-        <div className="alert alert-error" style={{ 
-          padding: '0.75rem 1rem',
-          backgroundColor: '#fee2e2',
-          color: '#b91c1c',
-          borderRadius: '8px',
-          marginBottom: '1.5rem' 
-        }}>
-          <span>{error}</span>
-        </div>
-      )}
-      
-      {success && !showPasswordInfo && (
-        <div className="alert alert-success" style={{ 
-          padding: '0.75rem 1rem',
-          backgroundColor: '#dcfce7',
-          color: '#15803d',
-          borderRadius: '8px',
-          marginBottom: '1.5rem' 
-        }}>
-          <span>{success}</span>
-        </div>
-      )}
-      
-      {/* User creation form */}
-      <div className="card fix-card">
-        <div className="card-header" style={{ 
-          borderBottom: '1px solid #e5e7eb',
-          paddingBottom: '1rem',
-          marginBottom: '1.5rem'
-        }}>
-          <h2>User Information</h2>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="form-grid fix-form">
-          <div className="form-group">
-            <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem' }}>Full Name *</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              placeholder="Enter full name"
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="email" style={{ display: 'block', marginBottom: '0.5rem' }}>Email *</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              placeholder="Enter email address"
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="role" style={{ display: 'block', marginBottom: '0.5rem' }}>Role *</label>
-            <select
-              id="role"
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            >
-              <option value="user">User</option>
-              <option value="company_admin">Company Admin</option>
-              <option value="hod">Head of Department</option>
-            </select>
-          </div>
-          
-          {/* Department dropdown */}
-          <div className="form-group">
-            <label htmlFor="departmentId" style={{ display: 'block', marginBottom: '0.5rem' }}>Department *</label>
-            <select
-              id="departmentId"
-              name="departmentId"
-              value={formData.departmentId}
-              onChange={handleChange}
-              disabled={loadingDepts}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            >
-              <option value="">Select Department</option>
-              {departments.map(dept => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
-              ))}
-            </select>
-            {loadingDepts && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
-                Loading departments...
-              </div>
-            )}
-          </div>
-          
-          {/* Location dropdown - Updated to use API data */}
-          <div className="form-group">
-            <label htmlFor="location" style={{ display: 'block', marginBottom: '0.5rem' }}>Location *</label>
-            <select
-              id="location"
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              disabled={loadingLocations}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            >
-              <option value="">Select Location</option>
-              {locations.map(location => (
-                <option key={location.id} value={location.name}>
-                  {location.name}
-                </option>
-              ))}
-            </select>
-            {loadingLocations && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
-                Loading locations...
-              </div>
-            )}
-            {!loadingLocations && locations.length === 0 && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#b91c1c' }}>
-                No locations found. Please create locations first.
-              </div>
-            )}
-          </div>
-          
-          {/* HOD dropdown - New */}
-          <div className="form-group">
-            <label htmlFor="hodId" style={{ display: 'block', marginBottom: '0.5rem' }}>Head of Department</label>
-            <select
-              id="hodId"
-              name="hodId"
-              value={formData.hodId}
-              onChange={handleChange}
-              disabled={loadingHODs}
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            >
-              <option value="">Select HOD (Optional)</option>
-              {hods.map(hod => (
-                <option key={hod.id} value={hod.id}>
-                  {hod.name}
-                </option>
-              ))}
-            </select>
-            {loadingHODs && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
-                Loading HODs...
-              </div>
-            )}
-          </div>
-          
-          {/* Designation dropdown - Updated to use API data */}
-          <div className="form-group">
-            <label htmlFor="designation" style={{ display: 'block', marginBottom: '0.5rem' }}>Designation *</label>
-            <select
-              id="designation"
-              name="designation"
-              value={formData.designation}
-              onChange={handleChange}
-              disabled={loadingDesignations}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            >
-              <option value="">Select Designation</option>
-              {designations.map(designation => (
-                <option key={designation.id} value={designation.name}>
-                  {designation.name}
-                </option>
-              ))}
-            </select>
-            {loadingDesignations && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
-                Loading designations...
-              </div>
-            )}
-            {!loadingDesignations && designations.length === 0 && (
-              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#b91c1c' }}>
-                No designations found. Please create designations first.
-              </div>
-            )}
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="phone" style={{ display: 'block', marginBottom: '0.5rem' }}>Phone</label>
-            <input
-              type="tel"
-              id="phone"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              placeholder="Enter phone number (Optional)"
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label htmlFor="employeeId" style={{ display: 'block', marginBottom: '0.5rem' }}>Employee ID *</label>
-            <input
-              type="text"
-              id="employeeId"
-              name="employeeId"
-              value={formData.employeeId}
-              onChange={handleChange}
-              required
-              placeholder="Enter employee ID"
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                fontSize: '1rem'
-              }}
-            />
-          </div>
-          
-          <div className="form-actions" style={{ 
-            marginTop: '20px', 
-            display: 'flex', 
-            justifyContent: 'flex-end', 
-            gap: '12px',
-            borderTop: '1px solid #e5e7eb',
-            paddingTop: '1.25rem',
-            gridColumn: '1 / -1'
-          }}>
-            <button 
-              type="button" 
-              onClick={() => navigate('/company-admin/user-management')}
-              style={{ 
-                padding: '0.75rem 1.25rem', 
-                background: '#f3f4f6', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '8px',
-                fontWeight: '500',
-                cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              disabled={loading}
-              style={{ 
-                padding: '0.75rem 1.5rem', 
-                background: loading ? '#94a3b8' : '#4f46e5', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '8px',
-                fontWeight: '500',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? 'Creating...' : 'Create User'}
-            </button>
-          </div>
-        </form>
-      </div>
-      
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .content-wrapper {
-          margin-left: 0 !important;
-          padding-left: 0 !important;
-        }
-      `}</style>
-    </div>
-  );
-
   // Enhanced logo rendering methods (consistent with Dashboard)
   const renderCompanyLogo = () => {
     if (!companyData) return null;
@@ -785,7 +459,7 @@ const CreateUser = () => {
               console.log("Logo failed to load, using fallback");
               // Replace with first letter of company name inside a colored circle
               const parent = e.target.parentNode;
-              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}</div>`;
+              parent.innerHTML = '<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">' + (companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C') + '</div>';
             }}
           />
         </div>
@@ -842,7 +516,7 @@ const CreateUser = () => {
             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             onError={(e) => {
               const parent = e.target.parentNode;
-              parent.innerHTML = `<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">${companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}</div>`;
+              parent.innerHTML = '<div style="width: 40px; height: 40px; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">' + (companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C') + '</div>';
             }}
           />
         </div>
@@ -864,7 +538,7 @@ const CreateUser = () => {
         marginRight: '10px',
         flexShrink: 0
       }}>
-        {companyData?.projectName ? companyData.projectName.charAt(0).toUpperCase() : 'P'}
+        {companyData?.name ? companyData.name.charAt(0).toUpperCase() : 'C'}
       </div>
     );
   };
@@ -882,7 +556,7 @@ const CreateUser = () => {
           style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
           onError={(e) => {
             const parent = e.target.parentNode;
-            parent.innerHTML = `<div style=\"width: 100%; height: 100%; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;\">${currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}</div>`;
+            parent.innerHTML = '<div style="width: 100%; height: 100%; border-radius: 50%; background-color: #4f46e5; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px;">' + (currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U') + '</div>';
           }}
         />
       );
@@ -891,181 +565,48 @@ const CreateUser = () => {
   };
 
   return (
-    <div className="dashboard-layout">
-      <aside className="sidebar" style={{ display: sidebarOpen ? 'block' : 'none' }}>
-        <div className="brand" style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          padding: '12px',
-          height: '64px',
-          borderBottom: '1px solid rgba(255,255,255,0.1)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+    <div className="dashboard-layout-new">
+      <header className="dashboard-header-new">
+        <div className="header-left">
+          <div className="company-info">
+            <button 
+              onClick={handleBackToDashboard}
+              className="back-button"
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '1.5rem',
+                cursor: 'pointer',
+                padding: '0.5rem',
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                marginRight: '1rem',
+                marginLeft: '-0.5rem',
+                marginTop: '2px',
+                marginBottom: '2px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '38px',
+                width: '38px'
+              }}
+              onMouseEnter={e => e.target.style.background = '#f3f4f6'}
+              onMouseLeave={e => e.target.style.background = 'none'}
+            >
+              ←
+            </button>
             {renderCompanyLogo()}
-            <span style={{ 
-              fontWeight: '600', 
-              fontSize: '16px',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              color: 'white',
-              letterSpacing: '0.5px'
-            }}>
-              {companyData ? companyData.name : 'Company'}
-            </span>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#111827' }}>
+                {companyData ? companyData.name : 'Company'} Administration
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+                Create User
+              </p>
+            </div>
           </div>
         </div>
-        
-        <nav>
-          <NavLink to="/company-admin/dashboard" className="nav-item">
-            <i className="icon">📊</i> Dashboard
-          </NavLink>
-          
-          <div 
-            className={`nav-item active`}
-            onClick={() => toggleSection('users')}
-          >
-            <i className="icon">👥</i> 
-            <span>User Administration</span>
-            <i className={`dropdown-icon ${expandedSections.users ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.users ? 'open' : ''}`}>
-            <NavLink to="/company-admin/user-creation" className={({isActive}) => isActive ? "nav-item active" : "nav-item"}>
-              Create User
-            </NavLink>
-            <NavLink to="/company-admin/user-management" className="nav-item">
-              Update User
-            </NavLink>
-          </div>
-          
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('departments')}
-          >
-            <i className="icon">🏢</i> 
-            <span>Department Workspace</span>
-            <i className={`dropdown-icon ${expandedSections.departments ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.departments ? 'open' : ''}`}>
-            <NavLink to="/company-admin/department-creation" className="nav-item">
-              Create Department
-            </NavLink>
-            <NavLink to="/company-admin/department-management" className="nav-item">
-              Department Workspace
-            </NavLink>
-          </div>
-
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('designations')}
-          >
-            <i className="icon">🏷️</i> 
-            <span>Designation Directory</span>
-            <i className={`dropdown-icon ${expandedSections.designations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.designations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/designation-creation" className="nav-item">
-              Create Designation
-            </NavLink>
-            <NavLink to="/company-admin/designation-management" className="nav-item">
-              Update Designation
-            </NavLink>
-          </div>
-
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('locations')}
-          >
-            <i className="icon">📍</i> 
-            <span>Location Center</span>
-            <i className={`dropdown-icon ${expandedSections.locations ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.locations ? 'open' : ''}`}>
-            <NavLink to="/company-admin/location-creation" className="nav-item">
-              Create Location
-            </NavLink>
-            <NavLink to="/company-admin/location-management" className="nav-item">
-              Update Location
-            </NavLink>
-          </div>
-          
-          <div 
-            className={`nav-item`}
-            onClick={() => toggleSection('raci')}
-          >
-            <i className="icon">📅</i> 
-            <span>RACI Operations</span>
-            <i className={`dropdown-icon ${expandedSections.raci ? 'open' : ''}`}>▼</i>
-          </div>
-          <div className={`sub-nav ${expandedSections.raci ? 'open' : ''}`}>
-            <NavLink to="/company-admin/event-master" className="nav-item">
-              Event Master
-            </NavLink>
-            <NavLink to="/company-admin/event-list" className="nav-item">
-              Event List
-            </NavLink>
-            <NavLink to="/company-admin/raci-assignment" className="nav-item">
-              RACI Assignment
-            </NavLink>
-            <NavLink to="/company-admin/raci-tracker" className="nav-item">
-              RACI Tracker
-            </NavLink>
-          </div>
-          
-          <NavLink to="/company-admin/meeting-calendar" className="nav-item">
-            <i className="icon">📆</i> Meeting Calendar
-          </NavLink>
-          
-          <NavLink to="/company-admin/hierarchy" className="nav-item">
-            <i className="icon">🏢</i> Hierarchy
-          </NavLink>
-          
-          <NavLink to="/company-admin/settings" className="nav-item">
-            <i className="icon">⚙️</i> Company Settings
-          </NavLink>
-          
-          <button className="nav-item" onClick={handleLogout} style={{
-            width: '100%',
-            textAlign: 'left',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginLeft: '0.5rem',
-            height: '44px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}>
-            <i className="icon">🚪</i> Logout
-          </button>
-        </nav>
-      </aside>
-      
-      {/* Collapse toggle button */}
-      <button onClick={toggleSidebar} style={{
-        position: 'fixed',
-        top: '12px',
-        left: sidebarOpen ? '312px' : '12px',
-        zIndex: 100,
-        background: '#4f46e5',
-        color: 'white',
-        border: 'none',
-        borderRadius: '4px',
-        padding: '6px 8px',
-        cursor: 'pointer'
-      }}>
-        {sidebarOpen ? '⮜' : '⮞'}
-      </button>
-
-      <main className="dashboard-content">
-        <header className="dashboard-header">
-          <div className="dashboard-title">
-            {companyData ? `${companyData.name} Administration` : 'Administration'}
-          </div>
-          <div className="header-actions">
+        <div className="header-right">
             <div className="user-info">
               <div className="user-avatar">
                 {renderUserPhoto()}
@@ -1075,11 +616,30 @@ const CreateUser = () => {
                 <div className="user-role">{currentUser ? currentUser.role : 'Loading...'}</div>
               </div>
             </div>
-            {/* Logout button removed from header as it exists in the sidebar */}
+          <button 
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#ef4444',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+            onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+          >
+            Logout
+          </button>
           </div>
         </header>
         
-        <div className="content-wrapper" style={{ paddingRight: '2rem' }}>
+      <main className="dashboard-content-new">
+        <div style={{ padding: '2rem', margin: '0 2rem' }}>
           <div className="page-header">
             <h1>Create New User</h1>
           </div>
@@ -1185,7 +745,10 @@ const CreateUser = () => {
             
             <form onSubmit={handleSubmit} className="form-grid">
               <div className="form-group">
-                <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem' }}>Full Name *</label>
+                <label htmlFor="name" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Full Name *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowNameHelp(true)} title="Help on Full Name">ℹ️</span>
+                </label>
                 <input
                   type="text"
                   id="name"
@@ -1205,7 +768,10 @@ const CreateUser = () => {
               </div>
               
               <div className="form-group">
-                <label htmlFor="email" style={{ display: 'block', marginBottom: '0.5rem' }}>Email *</label>
+                <label htmlFor="email" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Email *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowEmailHelp(true)} title="Help on Email">ℹ️</span>
+                </label>
                 <input
                   type="email"
                   id="email"
@@ -1225,7 +791,10 @@ const CreateUser = () => {
               </div>
               
               <div className="form-group">
-                <label htmlFor="role" style={{ display: 'block', marginBottom: '0.5rem' }}>Role *</label>
+                <label htmlFor="role" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Role *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowRoleHelp(true)} title="Help on Role">ℹ️</span>
+                </label>
                 <select
                   id="role"
                   name="role"
@@ -1248,7 +817,10 @@ const CreateUser = () => {
               
               {/* Department dropdown */}
               <div className="form-group">
-                <label htmlFor="departmentId" style={{ display: 'block', marginBottom: '0.5rem' }}>Department *</label>
+                <label htmlFor="departmentId" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Department *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowDepartmentHelp(true)} title="Help on Department">ℹ️</span>
+                </label>
                 <select
                   id="departmentId"
                   name="departmentId"
@@ -1281,7 +853,10 @@ const CreateUser = () => {
               
               {/* Location dropdown - Updated to use API data */}
               <div className="form-group">
-                <label htmlFor="location" style={{ display: 'block', marginBottom: '0.5rem' }}>Location *</label>
+                <label htmlFor="location" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Location *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowLocationHelp(true)} title="Help on Location">ℹ️</span>
+                </label>
                 <select
                   id="location"
                   name="location"
@@ -1319,7 +894,10 @@ const CreateUser = () => {
               
               {/* HOD dropdown - New */}
               <div className="form-group">
-                <label htmlFor="hodId" style={{ display: 'block', marginBottom: '0.5rem' }}>Head of Department</label>
+                <label htmlFor="hodId" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Head of Department
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowHodHelp(true)} title="Help on HOD">ℹ️</span>
+                </label>
                 <select
                   id="hodId"
                   name="hodId"
@@ -1351,7 +929,10 @@ const CreateUser = () => {
               
               {/* Designation dropdown - Updated to use API data */}
               <div className="form-group">
-                <label htmlFor="designation" style={{ display: 'block', marginBottom: '0.5rem' }}>Designation *</label>
+                <label htmlFor="designation" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Designation *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowDesignationHelp(true)} title="Help on Designation">ℹ️</span>
+                </label>
                 <select
                   id="designation"
                   name="designation"
@@ -1388,14 +969,48 @@ const CreateUser = () => {
               </div>
               
               <div className="form-group">
-                <label htmlFor="phone" style={{ display: 'block', marginBottom: '0.5rem' }}>Phone</label>
+                <label htmlFor="phone" style={{ display: 'block', marginBottom: '0.5rem' }}>WhatsApp No</label>
                 <input
                   type="tel"
                   id="phone"
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  placeholder="Enter phone number (Optional)"
+                  placeholder="Enter WhatsApp number (Optional)"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem'
+                  }}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="dob" style={{ display: 'block', marginBottom: '0.5rem' }}>Date of Birth</label>
+                <input
+                  type="date"
+                  id="dob"
+                  name="dob"
+                  value={formData.dob || ''}
+                  onChange={handleChange}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem'
+                  }}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="doj" style={{ display: 'block', marginBottom: '0.5rem' }}>Date of Joining</label>
+                <input
+                  type="date"
+                  id="doj"
+                  name="doj"
+                  value={formData.doj || ''}
+                  onChange={handleChange}
                   style={{
                     width: '100%',
                     padding: '0.75rem 1rem',
@@ -1407,7 +1022,10 @@ const CreateUser = () => {
               </div>
               
               <div className="form-group">
-                <label htmlFor="employeeId" style={{ display: 'block', marginBottom: '0.5rem' }}>Employee ID *</label>
+                <label htmlFor="employeeId" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Employee ID *
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowEmployeeIdHelp(true)} title="Help on Employee ID">ℹ️</span>
+                </label>
                 <input
                   type="text"
                   id="employeeId"
@@ -1424,6 +1042,44 @@ const CreateUser = () => {
                     fontSize: '1rem'
                   }}
                 />
+              </div>
+              <div className="form-group">
+                <label htmlFor="division" style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '0.5rem' }}>
+                  Division
+                  <span style={{ cursor: 'pointer', fontSize: '1.1em', color: '#4f46e5' }} onClick={() => setShowDivisionHelp(true)} title="Help on Division">ℹ️</span>
+                </label>
+                <select
+                  id="division"
+                  name="division"
+                  value={formData.division}
+                  onChange={handleChange}
+                  disabled={loadingDivisions}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem'
+                  }}
+                >
+                  <option value="">Select Division</option>
+                  {divisions.map(division => (
+                    <option key={division.id} value={division.name}>
+                      {division.name}
+                    </option>
+                  ))}
+                </select>
+                {loadingDivisions && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280', display: 'flex', alignItems: 'center' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', border: '2px solid #e5e7eb', borderTopColor: '#6366f1', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}></div>
+                    Loading divisions...
+                  </div>
+                )}
+                {!loadingDivisions && divisions.length === 0 && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#b91c1c' }}>
+                    No divisions found. Please create divisions first.
+                  </div>
+                )}
               </div>
               
               <div className="form-actions" style={{ 
@@ -1469,6 +1125,128 @@ const CreateUser = () => {
           </div>
         </div>
       </main>
+
+      {showNameHelp && (
+        <HelpModal onClose={() => setShowNameHelp(false)} title="Full Name" text="Use your full name as per the Company's Employee Master" />
+      )}
+      {showEmailHelp && (
+        <HelpModal onClose={() => setShowEmailHelp(false)} title="Email" text="Use your company-assigned email ID" />
+      )}
+      {showRoleHelp && (
+        <HelpModal onClose={() => setShowRoleHelp(false)} title="Role" text="Select your role as per assigned access rights" />
+      )}
+      {showDepartmentHelp && (
+        <HelpModal onClose={() => setShowDepartmentHelp(false)} title="Department" text="Select your department as per company records." />
+      )}
+      {showLocationHelp && (
+        <HelpModal onClose={() => setShowLocationHelp(false)} title="Location" text="Specify your official seating location as per company records" />
+      )}
+      {showHodHelp && (
+        <HelpModal onClose={() => setShowHodHelp(false)} title="HOD" text="Enter the name of your Head of Department as per company records" />
+      )}
+      {showDesignationHelp && (
+        <HelpModal onClose={() => setShowDesignationHelp(false)} title="Designation" text="Enter your official designation as per company records." />
+      )}
+      {showEmployeeIdHelp && (
+        <HelpModal onClose={() => setShowEmployeeIdHelp(false)} title="Employee ID" text="Enter your Employee ID as per official records." />
+      )}
+      {showDivisionHelp && (
+        <HelpModal onClose={() => setShowDivisionHelp(false)} title="Division" text="Select your division as per company structure" />
+      )}
+
+      <style jsx="true">{`
+        .dashboard-layout-new {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .dashboard-header-new {
+          background: white;
+          border-bottom: 1px solid #e5e7eb;
+          padding: 1rem 2rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+        }
+        
+        .header-left {
+          display: flex;
+          align-items: center;
+        }
+        
+        .company-info {
+          display: flex;
+          align-items: center;
+        }
+        
+        .header-right {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+        
+        .user-info {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+        
+        .user-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: #e0e7ff;
+          color: #4f46e5;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+          font-size: 1rem;
+          overflow: hidden;
+        }
+        
+        .user-details {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .user-name {
+          font-weight: 600;
+          font-size: 0.9rem;
+          color: #111827;
+        }
+        
+        .user-role {
+          font-size: 0.8rem;
+          color: #6b7280;
+        }
+        
+        .dashboard-content-new {
+          flex: 1;
+          overflow-y: auto;
+        }
+        
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.5rem;
+        }
+        
+        .form-group {
+          display: flex;
+          flex-direction: column;
+        }
+        
+        .form-actions {
+          grid-column: 1 / -1;
+        }
+      `}</style>
     </div>
   );
 };
